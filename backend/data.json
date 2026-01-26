@@ -1,0 +1,26 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "name": "Admin",
+      "email": "hr@example.com",
+      "password": "password123",
+      "role": "HR"
+    },
+    {
+      "id": 2,
+      "name": "E2E Test",
+      "email": "e2e1769172417794@example.com",
+      "password": "secret",
+      "role": "EMPLOYEE"
+    }
+  ],
+  "employees": [
+    {
+      "userId": 2,
+      "name": "E2E Test",
+      "email": "e2e1769172417794@example.com"
+    }
+  ],
+  "dependents": []
+}
