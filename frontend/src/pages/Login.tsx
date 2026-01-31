@@ -65,21 +65,19 @@ export default function Login(): JSX.Element {
       if (!password) setPassword(passwordVal)
 
       const res = (await api.login(emailVal, passwordVal, selectedRole)) as LoginResponse
+      console.log('Login response:', res)
       if (!res || !res.token) {
-        setError(res?.error || 'Invalid credentials')
+        const errorMsg = res?.error || 'Invalid credentials'
+        console.error('Login error:', errorMsg)
+        setError(errorMsg)
         return
       }
 
       const serverRole = normalizeRole(res.role)
       const effectiveRole: Role = serverRole || selectedRole
 
-      if (serverRole && serverRole !== selectedRole) {
-        setError(`Role mismatch: account role is ${res.role}, but you selected ${selectedRole}.`)
-        return
-      }
-
       localStorage.setItem('token', res.token)
-      localStorage.setItem('role', effectiveRole)
+      localStorage.setItem('role', String(effectiveRole))
       if (remember) localStorage.setItem('remember', '1')
 
       try {
@@ -158,11 +156,11 @@ export default function Login(): JSX.Element {
 
           <div className="mt-6 flex gap-3">
             <button type="button" onClick={() => setSelectedRole('HR')} className={`px-4 py-2 rounded-full font-semibold text-sm transition-all duration-150 focus:outline-none ${selectedRole === 'HR' ? `text-white bg-linear-to-r ${roleTheme} shadow-md` : 'bg-gray-50 text-gray-700 border border-gray-200'}`}>Login as HR</button>
-            <button type="button" onClick={() => setSelectedRole('EMPLOYEE')} className={`px-4 py-2 rounded-full font-semibold text-sm transition-all duration-150 focus:outline-none ${selectedRole === 'EMPLOYEE' ? `text-white bg-linear-to-r ${roleTheme} shadow-md` : 'bg-gray-50 text-gray-700 border border-gray-200'}`}>Login as Employee</button>
+            <button type="button" onClick={() => setSelectedRole('EMPLOYEE')} className={`px-4 py-2 rounded-full font-semibold text-sm transition-all duration-150 focus:outline-none ${selectedRole === 'EMPLOYEE' ? `text-white bg-linear-to-r ${roleTheme} shadow-md` : 'bg-gray-50 text-gray-700 border border-gray-200'}`}>Login as Member</button>
           </div>
 
           <div className="mt-4 flex items-center gap-6">
-            <label className="flex items-center gap-2 text-sm text-gray-600"><input type="radio" name="role" checked={selectedRole === 'EMPLOYEE'} onChange={() => setSelectedRole('EMPLOYEE')} className="w-4 h-4 accent-sky-500" />Employee</label>
+            <label className="flex items-center gap-2 text-sm text-gray-600"><input type="radio" name="role" checked={selectedRole === 'EMPLOYEE'} onChange={() => setSelectedRole('EMPLOYEE')} className="w-4 h-4 accent-sky-500" />Member</label>
             <label className="flex items-center gap-2 text-sm text-gray-600"><input type="radio" name="role" checked={selectedRole === 'HR'} onChange={() => setSelectedRole('HR')} className="w-4 h-4 accent-purple-600" />HR</label>
           </div>
 

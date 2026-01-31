@@ -202,11 +202,28 @@ app.get('/me', authenticate, async (req, res) => {
   try {
     const user = (req as any).user;
     const dbUser = await prisma.user.findUnique({ where: { id: user.userId } });
-    const emp = await prisma.employee.findUnique({ where: { userId: user.userId } }).catch(() => null);
+    let emp = await prisma.employee.findUnique({ where: { userId: user.userId } }).catch(() => null);
+    
+    // If employee record doesn't exist for an EMPLOYEE user, create it
+    if (!emp && dbUser && String(dbUser.role || '').toUpperCase() === 'EMPLOYEE') {
+      emp = await prisma.employee.create({ data: { userId: user.userId } }).catch(() => null);
+    }
+    
     return res.json({ user: dbUser, employee: emp });
   } catch (e) {
     console.error(e);
     return res.status(500).json({ error: 'Failed to fetch me' });
+  }
+});
+
+// GET all employees (accessible to authenticated users)
+app.get("/employees", authenticate, async (req, res) => {
+  try {
+    const employees = await prisma.employee.findMany({ include: { user: true, dependents: true } });
+    return res.json(employees);
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Failed to fetch employees" });
   }
 });
 

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import EmployeeSummaryCard from '../components/EmployeeSummaryCard'
 import DependentTable from '../components/DependentTable'
 import AddDependentModal from '../components/AddDependentModal'
+import EditDependentModal from '../components/EditDependentModal'
 import AssignPolicyModal from '../components/AssignPolicyModal'
 import api from '../api'
 
@@ -11,11 +12,14 @@ export default function EmployeeDependents() {
   const [employee, setEmployee] = useState<any>(null)
   const [dependents, setDependents] = useState<any[]>([])
   const [policies, setPolicies] = useState<any[]>([])
+  const [employees, setEmployees] = useState<any[]>([])
   const [loadingEmployee, setLoadingEmployee] = useState(true)
   const [loadingDependents, setLoadingDependents] = useState(true)
   const [loadingPolicies, setLoadingPolicies] = useState(true)
+  const [loadingEmployees, setLoadingEmployees] = useState(true)
   const [error, setError] = useState('')
   const [addModalOpen, setAddModalOpen] = useState(false)
+  const [editModalOpen, setEditModalOpen] = useState(false)
   const [assignModalOpen, setAssignModalOpen] = useState(false)
   const [selectedDependent, setSelectedDependent] = useState<any>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -45,6 +49,24 @@ export default function EmployeeDependents() {
     }
 
     fetchEmployee()
+  }, [])
+
+  // Load all employees list
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        setLoadingEmployees(true)
+        const data = await api.getEmployees()
+        console.log('Employees list:', data)
+        setEmployees(Array.isArray(data) ? data : data?.data || [])
+      } catch (err: any) {
+        console.error('Failed to load employees list:', err)
+      } finally {
+        setLoadingEmployees(false)
+      }
+    }
+
+    fetchEmployees()
   }, [])
 
   // Load dependents and policies when employee is loaded
@@ -116,6 +138,45 @@ export default function EmployeeDependents() {
     } catch (err: any) {
       console.error('Error adding dependent:', err)
       throw new Error(err.message || 'Failed to add dependent')
+    } finally {
+      setIsSubmitting(false)
+      setLoadingDependents(false)
+    }
+  }
+
+  const handleEditDependent = async (dependentId: string, formData: any) => {
+    const empId = employee?.employee?.id || employee?.id
+    console.log('handleEditDependent called with:', { dependentId, formData, empId })
+    
+    if (!empId) {
+      console.error('No employee ID found!')
+      throw new Error('No employee ID - cannot update dependent')
+    }
+
+    try {
+      setIsSubmitting(true)
+      const empIdNum = typeof empId === 'string' ? parseInt(empId, 10) : empId
+      console.log('Updating dependent with empIdNum:', empIdNum)
+      
+      const updateRes = await api.updateDependent(Number(dependentId), {
+        ...formData,
+        employeeId: empIdNum
+      })
+      
+      console.log('Update dependent response:', updateRes)
+
+      // Refresh dependents list
+      setLoadingDependents(true)
+      const updated = await api.getDependents(empIdNum)
+      console.log('Updated dependents list after edit:', updated)
+      const depList = Array.isArray(updated) ? updated : updated?.data || []
+      console.log('Parsed dependent list:', depList)
+      setDependents(depList)
+      setEditModalOpen(false)
+      setSelectedDependent(null)
+    } catch (err: any) {
+      console.error('Error updating dependent:', err)
+      throw new Error(err.message || 'Failed to update dependent')
     } finally {
       setIsSubmitting(false)
       setLoadingDependents(false)
@@ -209,7 +270,7 @@ export default function EmployeeDependents() {
 
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+        gridTemplateColumns: '1fr 1fr 1fr',
         gap: '24px',
         maxWidth: '1400px',
         margin: '0 auto'
@@ -220,6 +281,89 @@ export default function EmployeeDependents() {
             employee={employee}
             isLoading={loadingEmployee}
           />
+        </div>
+
+        {/* Middle Column - Employees List */}
+        <div style={{minHeight: 'fit-content'}}>
+          <div style={{
+            background: 'white',
+            borderRadius: '12px',
+            padding: '24px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+            border: '1px solid #e5e7eb',
+            height: '100%'
+          }}>
+            <div style={{
+              marginBottom: '24px',
+              paddingBottom: '16px',
+              borderBottom: '1px solid #e5e7eb'
+            }}>
+              <h2 style={{
+                margin: 0,
+                fontSize: '20px',
+                fontWeight: '600',
+                color: '#0f172a'
+              }}>
+                All Employees {employees.length > 0 && `(${employees.length})`}
+              </h2>
+            </div>
+            
+            {loadingEmployees ? (
+              <div style={{textAlign: 'center', padding: '32px 0', color: '#6b7280'}}>
+                Loading employees...
+              </div>
+            ) : employees.length === 0 ? (
+              <div style={{textAlign: 'center', padding: '32px 0', color: '#6b7280'}}>
+                No employees found
+              </div>
+            ) : (
+              <div style={{display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '600px', overflowY: 'auto'}}>
+                {employees.map((emp) => (
+                  <div
+                    key={emp.id}
+                    style={{
+                      padding: '12px',
+                      background: '#f9fafb',
+                      borderRadius: '8px',
+                      border: '1px solid #e5e7eb',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#f0f9ff'
+                      e.currentTarget.style.borderColor = '#0b63ff'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = '#f9fafb'
+                      e.currentTarget.style.borderColor = '#e5e7eb'
+                    }}
+                  >
+                    <div style={{
+                      fontWeight: '500',
+                      color: '#0f172a',
+                      fontSize: '14px',
+                      marginBottom: '4px'
+                    }}>
+                      {emp.user?.name || `Employee ${emp.id}`}
+                    </div>
+                    <div style={{
+                      fontSize: '12px',
+                      color: '#6b7280',
+                      marginBottom: '4px'
+                    }}>
+                      {emp.user?.email}
+                    </div>
+                    <div style={{
+                      fontSize: '11px',
+                      color: '#9ca3af'
+                    }}>
+                      ID: {emp.id}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Right Column - Dependents Management */}
@@ -309,6 +453,10 @@ export default function EmployeeDependents() {
             <DependentTable
               dependents={dependents}
               isLoading={loadingDependents}
+              onEdit={(dependent) => {
+                setSelectedDependent(dependent)
+                setEditModalOpen(true)
+              }}
               onAssignPolicy={(dependent) => {
                 setSelectedDependent(dependent)
                 setAssignModalOpen(true)
@@ -356,6 +504,19 @@ export default function EmployeeDependents() {
         onSubmit={handleAddDependent}
         isLoading={isSubmitting}
       />
+
+      {selectedDependent && (
+        <EditDependentModal
+          isOpen={editModalOpen}
+          dependent={selectedDependent}
+          onClose={() => {
+            setEditModalOpen(false)
+            setSelectedDependent(null)
+          }}
+          onSubmit={handleEditDependent}
+          isLoading={isSubmitting}
+        />
+      )}
 
       {selectedDependent && (
         <AssignPolicyModal
