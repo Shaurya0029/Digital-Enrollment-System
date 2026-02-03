@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import RequireRole from '../components/RequireRole'
 import EmployeeSummaryCard from '../components/EmployeeSummaryCard'
 import DependentTable from '../components/DependentTable'
 import AddDependentModal from '../components/AddDependentModal'
@@ -7,16 +8,14 @@ import EditDependentModal from '../components/EditDependentModal'
 import AssignPolicyModal from '../components/AssignPolicyModal'
 import api from '../api'
 
-export default function EmployeeDependents() {
+function EmployeeDependentsContent() {
   const navigate = useNavigate()
   const [employee, setEmployee] = useState<any>(null)
   const [dependents, setDependents] = useState<any[]>([])
   const [policies, setPolicies] = useState<any[]>([])
-  const [employees, setEmployees] = useState<any[]>([])
   const [loadingEmployee, setLoadingEmployee] = useState(true)
   const [loadingDependents, setLoadingDependents] = useState(true)
   const [loadingPolicies, setLoadingPolicies] = useState(true)
-  const [loadingEmployees, setLoadingEmployees] = useState(true)
   const [error, setError] = useState('')
   const [addModalOpen, setAddModalOpen] = useState(false)
   const [editModalOpen, setEditModalOpen] = useState(false)
@@ -31,14 +30,6 @@ export default function EmployeeDependents() {
         setLoadingEmployee(true)
         const data = await api.getMe()
         console.log('Employee data from api.getMe():', data)
-        console.log('Employee structure:', {
-          hasDirect: !!data?.id,
-          hasNested: !!data?.employee?.id,
-          directId: data?.id,
-          nestedId: data?.employee?.id,
-          employee: data?.employee,
-          fullData: data
-        })
         setEmployee(data)
       } catch (err: any) {
         setError('Failed to load employee data')
@@ -49,24 +40,6 @@ export default function EmployeeDependents() {
     }
 
     fetchEmployee()
-  }, [])
-
-  // Load all employees list
-  useEffect(() => {
-    const fetchEmployees = async () => {
-      try {
-        setLoadingEmployees(true)
-        const data = await api.getEmployees()
-        console.log('Employees list:', data)
-        setEmployees(Array.isArray(data) ? data : data?.data || [])
-      } catch (err: any) {
-        console.error('Failed to load employees list:', err)
-      } finally {
-        setLoadingEmployees(false)
-      }
-    }
-
-    fetchEmployees()
   }, [])
 
   // Load dependents and policies when employee is loaded
@@ -244,12 +217,40 @@ export default function EmployeeDependents() {
     }
   }
 
+  const handleUploadDocument = async (dependentId: string, file: File) => {
+    try {
+      setIsSubmitting(true)
+      const depIdNum = typeof dependentId === 'string' ? parseInt(dependentId, 10) : dependentId
+      
+      await api.uploadDependentDocument(depIdNum, file)
+      
+      // Show success message
+      setError('') // Clear any previous errors
+      alert('Document uploaded successfully!')
+      
+      // Refresh dependents list to show updated document
+      const empId = employee?.employee?.id || employee?.id
+      if (empId) {
+        const empIdNum = typeof empId === 'string' ? parseInt(empId, 10) : empId
+        setLoadingDependents(true)
+        const updated = await api.getDependents(empIdNum)
+        setDependents(Array.isArray(updated) ? updated : updated?.data || [])
+      }
+    } catch (err: any) {
+      setError('Failed to upload document: ' + (err.message || 'Unknown error'))
+    } finally {
+      setIsSubmitting(false)
+      setLoadingDependents(false)
+    }
+  }
+
   return (
     <div style={{
       minHeight: '100vh',
       background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
       padding: '24px'
     }}>
+      {/* Page Content */}
       {/* Breadcrumb */}
       <div style={{marginBottom: '24px', fontSize: '14px', color: '#6b7280'}}>
         <button
@@ -270,7 +271,7 @@ export default function EmployeeDependents() {
 
       <div style={{
         display: 'grid',
-        gridTemplateColumns: '1fr 1fr 1fr',
+        gridTemplateColumns: '1fr 1fr',
         gap: '24px',
         maxWidth: '1400px',
         margin: '0 auto'
@@ -281,89 +282,6 @@ export default function EmployeeDependents() {
             employee={employee}
             isLoading={loadingEmployee}
           />
-        </div>
-
-        {/* Middle Column - Employees List */}
-        <div style={{minHeight: 'fit-content'}}>
-          <div style={{
-            background: 'white',
-            borderRadius: '12px',
-            padding: '24px',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-            border: '1px solid #e5e7eb',
-            height: '100%'
-          }}>
-            <div style={{
-              marginBottom: '24px',
-              paddingBottom: '16px',
-              borderBottom: '1px solid #e5e7eb'
-            }}>
-              <h2 style={{
-                margin: 0,
-                fontSize: '20px',
-                fontWeight: '600',
-                color: '#0f172a'
-              }}>
-                All Employees {employees.length > 0 && `(${employees.length})`}
-              </h2>
-            </div>
-            
-            {loadingEmployees ? (
-              <div style={{textAlign: 'center', padding: '32px 0', color: '#6b7280'}}>
-                Loading employees...
-              </div>
-            ) : employees.length === 0 ? (
-              <div style={{textAlign: 'center', padding: '32px 0', color: '#6b7280'}}>
-                No employees found
-              </div>
-            ) : (
-              <div style={{display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '600px', overflowY: 'auto'}}>
-                {employees.map((emp) => (
-                  <div
-                    key={emp.id}
-                    style={{
-                      padding: '12px',
-                      background: '#f9fafb',
-                      borderRadius: '8px',
-                      border: '1px solid #e5e7eb',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = '#f0f9ff'
-                      e.currentTarget.style.borderColor = '#0b63ff'
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = '#f9fafb'
-                      e.currentTarget.style.borderColor = '#e5e7eb'
-                    }}
-                  >
-                    <div style={{
-                      fontWeight: '500',
-                      color: '#0f172a',
-                      fontSize: '14px',
-                      marginBottom: '4px'
-                    }}>
-                      {emp.user?.name || `Employee ${emp.id}`}
-                    </div>
-                    <div style={{
-                      fontSize: '12px',
-                      color: '#6b7280',
-                      marginBottom: '4px'
-                    }}>
-                      {emp.user?.email}
-                    </div>
-                    <div style={{
-                      fontSize: '11px',
-                      color: '#9ca3af'
-                    }}>
-                      ID: {emp.id}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Right Column - Dependents Management */}
@@ -462,6 +380,7 @@ export default function EmployeeDependents() {
                 setAssignModalOpen(true)
               }}
               onDelete={handleDeleteDependent}
+              onUploadDocument={handleUploadDocument}
               onView={(dependent) => {
                 // Could be expanded to show a view modal
                 console.log('View dependent:', dependent)
@@ -530,5 +449,13 @@ export default function EmployeeDependents() {
         />
       )}
     </div>
+  )
+}
+
+export default function EmployeeDependents() {
+  return (
+    <RequireRole role="EMPLOYEE">
+      <EmployeeDependentsContent />
+    </RequireRole>
   )
 }

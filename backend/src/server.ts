@@ -227,13 +227,32 @@ app.get("/employees", authenticate, async (req, res) => {
   }
 });
 
-// HR: list employees
+// HR: list employees (HR only)
 app.get("/hr/employees", authenticate, isHR, async (req, res) => {
   try {
-    const employees = await prisma.employee.findMany({ include: { user: true, dependents: true } });
+    const user = (req as any).user;
+    console.log('[GET /hr/employees] ✅ HR user accessing endpoint', {
+      userId: user?.userId,
+      role: user?.role,
+      timestamp: new Date().toISOString()
+    });
+
+    const employees = await prisma.employee.findMany({
+      include: {
+        user: true,
+        dependents: true,
+        policies: { include: { policy: true } }
+      },
+    });
+
+    console.log('[GET /hr/employees] 📊 Fetched employees:', {
+      count: employees.length,
+      timestamp: new Date().toISOString()
+    });
+
     return res.json(employees);
   } catch (e) {
-    console.error(e);
+    console.error('[GET /hr/employees] ❌ Error:', e);
     return res.status(500).json({ error: "Failed to fetch employees" });
   }
 });
@@ -266,29 +285,62 @@ app.delete("/hr/employee/:id", authenticate, isHR, async (req, res) => {
 // REST compatibility: create employee (HR only)
 app.post("/hr/employee", authenticate, isHR, async (req, res) => {
   const { name, email, password, employeeId, designation, dateOfJoining, dob, gender, mobile, policyId } = req.body;
+  
   if (!name || !email) return res.status(400).json({ error: "Missing required fields" });
 
   try {
-    console.log('[POST] /hr/employee request body=', req.body, 'user=', (req as any).user)
+    const user = (req as any).user;
+    console.log('[POST /hr/employee] 📝 Creating employee', {
+      requestData: { name, email, policyId },
+      hrUser: { userId: user?.userId, role: user?.role },
+      timestamp: new Date().toISOString()
+    });
+
     // prevent creating duplicate users by email
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) return res.status(400).json({ error: 'Email already in use' });
+
     // create user
     const hashed = password ? await bcrypt.hash(password, 8) : "";
-    const user = await prisma.user.create({ data: { name, email, password: hashed, role: "EMPLOYEE" } });
+    const newUser = await prisma.user.create({
+      data: { name, email, password: hashed, role: "EMPLOYEE" },
+    });
 
     // create employee record (link to user)
-    const employee = await prisma.employee.create({ data: { userId: user.id } });
+    const employee = await prisma.employee.create({
+      data: { userId: newUser.id },
+      include: { user: true, dependents: true },
+    });
 
     // optionally assign policy
     if (policyId) {
-      await prisma.employeePolicy.create({ data: { employeeId: employee.id, policyId: Number(policyId) } }).catch(() => null);
+      await prisma.employeePolicy.create({
+        data: { employeeId: employee.id, policyId: Number(policyId) },
+      }).catch(() => null);
     }
 
-    return res.status(201).json({ employee: { id: employee.id, userId: user.id } });
+    console.log('[POST /hr/employee] ✅ Employee created successfully', {
+      employeeId: employee.id,
+      userId: newUser.id,
+      name,
+      email,
+      timestamp: new Date().toISOString()
+    });
+
+    return res.status(201).json({
+      employee: {
+        ...employee,
+        name: newUser.name,
+        email: newUser.email,
+      },
+      user: newUser,
+    });
   } catch (e) {
-    console.error('create employee failed', e);
-    return res.status(500).json({ error: "Failed to create employee", details: (e as any)?.message || String(e) });
+    console.error('[POST /hr/employee] ❌ Error:', e);
+    return res.status(500).json({
+      error: "Failed to create employee",
+      details: (e as any)?.message || String(e),
+    });
   }
 });
 

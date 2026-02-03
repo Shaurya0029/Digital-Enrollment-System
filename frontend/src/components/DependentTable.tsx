@@ -7,6 +7,7 @@ interface DependentTableProps {
   onDelete?: (dependentId: string) => void
   onAssignPolicy?: (dependent: any) => void
   onView?: (dependent: any) => void
+  onUploadDocument?: (dependentId: string, file: File) => void
 }
 
 export default function DependentTable({
@@ -15,7 +16,8 @@ export default function DependentTable({
   onEdit,
   onDelete,
   onAssignPolicy,
-  onView
+  onView,
+  onUploadDocument
 }: DependentTableProps) {
   if (isLoading) {
     return (
@@ -113,6 +115,46 @@ export default function DependentTable({
                   color: '#1e40af'
                 }}>
                   <strong>Policy:</strong> {dependent.policy?.name || dependent.policy || 'Assigned'}
+                </div>
+              )}
+
+              {onUploadDocument && (
+                <div style={{marginTop: '12px'}}>
+                  <label style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    fontSize: '13px',
+                    color: '#6b7280',
+                    cursor: 'pointer',
+                    padding: '8px 12px',
+                    background: '#f3f4f6',
+                    borderRadius: '6px',
+                    border: '1px dashed #d1d5db',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#e5e7eb'
+                    e.currentTarget.style.borderColor = '#0b63ff'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = '#f3f4f6'
+                    e.currentTarget.style.borderColor = '#d1d5db'
+                  }}
+                  >
+                    <span>📄</span>
+                    <span>Upload Document</span>
+                    <input
+                      type="file"
+                      style={{display: 'none'}}
+                      onChange={(e) => {
+                        if (e.target.files?.[0]) {
+                          onUploadDocument(dependent.id, e.target.files[0])
+                        }
+                      }}
+                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                    />
+                  </label>
                 </div>
               )}
             </div>

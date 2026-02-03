@@ -8,11 +8,23 @@ type Props = {
 }
 
 export default function RequireRole({ role, userRole, children }: Props){
-  // prefer explicit prop; fallback to localStorage for apps without context
+  // Check for token in localStorage
+  const token = localStorage.getItem('token')
+  
+  // If no token, redirect to login
+  if (!token) {
+    return <Navigate to="/login" replace />
+  }
+
+  // Get current role from prop or localStorage
   const current = (userRole ?? localStorage.getItem('role') ?? '').toUpperCase()
   const required = String(role || '').toUpperCase()
-  if (!current || !current.startsWith(required)){
+  
+  // If role mismatch, redirect to unauthorized
+  if (!current || !current.startsWith(required)) {
     return <Navigate to="/unauthorized" replace />
   }
+  
+  // Access granted
   return <>{children}</>
 }

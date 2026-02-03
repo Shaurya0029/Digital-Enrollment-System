@@ -1,431 +1,755 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../api'
-import DashboardStats from '../components/DashboardStats'
-import RecentActivity from '../components/RecentActivity'
+import RequireRole from '../components/RequireRole'
+import { Building2, Users, Shield, Clock, FileText, Download, ChevronRight, HelpCircle, Loader } from 'lucide-react'
+
+interface Employee {
+  id?: number
+  user?: { name: string; email: string }
+  firstName?: string
+  lastName?: string
+  email?: string
+  phone?: string
+  dateOfBirth?: string
+  address?: string
+  status?: string
+  company?: string
+  name?: string
+}
+
+interface Policy {
+  id?: number
+  name?: string
+  policyNumber?: string
+  coverageType?: string
+  status?: string
+  description?: string
+}
+
+interface Dependent {
+  id?: number
+  name?: string
+  relationship?: string
+  status?: string
+  policyId?: number
+  dateOfBirth?: string
+}
+
+interface Activity {
+  id: number
+  type: 'enrollment' | 'update' | 'pending' | 'completed'
+  title: string
+  description: string
+  timestamp: string
+}
 
 export default function EmployeeDashboard(){
-  const [employeeId, setEmployeeId] = useState('')
-  const [name, setName] = useState('')
-  const [relation, setRelation] = useState('')
-  const [profileName, setProfileName] = useState('')
-  const [profileEmail, setProfileEmail] = useState('')
-  const [employee, setEmployee] = useState<any | null>(null)
-  const [employees, setEmployees] = useState<any[]>([])
-  const [selected, setSelected] = useState<any | null>(null)
-  const [showModal, setShowModal] = useState(false)
-  const [modalDependents, setModalDependents] = useState<any[]>([])
-  const [showDependentsModal, setShowDependentsModal] = useState(false)
-  const [dependentsLoading, setDependentsLoading] = useState(false)
-  const [dependentsError, setDependentsError] = useState('')
-  const [currentPassword, setCurrentPassword] = useState('')
-  const [newPassword, setNewPassword] = useState('')
+  const [employee, setEmployee] = useState<Employee | null>(null)
+  const [policies, setPolicies] = useState<Policy[]>([])
+  const [dependents, setDependents] = useState<Dependent[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [pendingRequests, setPendingRequests] = useState(0)
   const navigate = useNavigate()
 
-  useEffect(()=>{
-    const id = localStorage.getItem('employeeId')
-    if (id) setEmployeeId(id);
-    ;(async ()=>{
-      try{
-        const me:any = await api.getMe();
-        if (me) {
-          setProfileName(me.employee?.user?.name || me.user?.name || '')
-          setProfileEmail(me.employee?.user?.email || me.user?.email || '')
-          setEmployee(me.employee || me)
-        }
-      }catch(_){ }
-    })()
-
-    // Fetch all employees list
-    ;(async ()=>{
-      try{
-        const result:any = await api.getEmployees()
-        if (Array.isArray(result)) {
-          setEmployees(result)
-        } else if (result && result.data && Array.isArray(result.data)) {
-          setEmployees(result.data)
-        } else if (result && result.employees && Array.isArray(result.employees)) {
-          setEmployees(result.employees)
-        }
-      }catch(err){ 
-        console.error('Failed to fetch employees:', err)
-      }
-    })()
+  useEffect(() => {
+    loadDashboardData()
   }, [])
 
-  async function openEmployeeModal(emp:any){
-    setSelected(emp)
-    setShowModal(true)
-    // try load dependents for this employee id
-    try{
-      const deps:any = await api.getDependents(emp.id)
-      if (Array.isArray(deps)) setModalDependents(deps)
-      else setModalDependents([])
-    }catch(err){ setModalDependents([]) }
-  }
+  async function loadDashboardData() {
+    setLoading(true)
+    setError(null)
+    try {
+      // Load employee profile
+      const meRes: any = await api.getMe().catch(() => null)
+      if (meRes) {
+        setEmployee(meRes.employee || meRes)
+      }
 
-  async function openDependentsModal(){
-    setShowDependentsModal(true)
-    setDependentsLoading(true)
-    setDependentsError('')
-    try{
-      const id = employeeId
-      if (!id) {
-        setDependentsError('Employee ID not found')
-        setDependentsLoading(false)
-        return
+      // Load all policies
+      const policiesRes: any = await api.getPolicies().catch(() => [])
+      if (Array.isArray(policiesRes)) {
+        setPolicies(policiesRes)
+      } else if (policiesRes?.data && Array.isArray(policiesRes.data)) {
+        setPolicies(policiesRes.data)
       }
-      const deps:any = await api.getDependents(Number(id))
-      if (Array.isArray(deps)) {
-        setModalDependents(deps)
-      } else if (deps && deps.data && Array.isArray(deps.data)) {
-        setModalDependents(deps.data)
-      } else {
-        setModalDependents([])
+
+      // Load employee's dependents
+      const employeeId = localStorage.getItem('employeeId')
+      if (employeeId) {
+        const depsRes: any = await api.getDependents(Number(employeeId)).catch(() => [])
+        if (Array.isArray(depsRes)) {
+          setDependents(depsRes)
+          // Count pending dependents (without policy assignment)
+          const pending = depsRes.filter((dep: Dependent) => !dep.policyId || dep.status === 'pending').length
+          setPendingRequests(pending)
+        } else if (depsRes?.data && Array.isArray(depsRes.data)) {
+          setDependents(depsRes.data)
+          const pending = depsRes.data.filter((dep: Dependent) => !dep.policyId || dep.status === 'pending').length
+          setPendingRequests(pending)
+        }
       }
-      setDependentsError('')
-    }catch(err:any){ 
-      console.error('Failed to load dependents:', err)
-      setDependentsError('Failed to load dependents. Please try again.')
-      setModalDependents([])
-    }finally{
-      setDependentsLoading(false)
+    } catch (err) {
+      console.error('Failed to load dashboard data:', err)
+      setError('Failed to load dashboard data')
+    } finally {
+      setLoading(false)
     }
   }
 
-  async function handleCreate(e:any){
-    e.preventDefault()
-    if (!employeeId) return alert('Set your employee id')
-    const empId = Number(employeeId)
-    const payload = { name, relation, employeeId: empId }
-    const res:any = await api.createDependent(empId, payload)
-    if (res.dependent || res.id) { setName(''); setRelation(''); alert('Dependent created'); await openDependentsModal() }
-    else alert(res.error || 'Create failed')
+  const getActivityFeed = (): Activity[] => {
+    const feed: Activity[] = [
+      {
+        id: 1,
+        type: 'completed',
+        title: 'Insurance Enrollment Completed',
+        description: 'Your insurance enrollment for 2026 has been confirmed',
+        timestamp: 'Today at 9:30 AM'
+      },
+      {
+        id: 2,
+        type: 'update',
+        title: `Dependents Updated`,
+        description: `${dependents.length} dependent${dependents.length !== 1 ? 's' : ''} in your coverage`,
+        timestamp: 'January 28'
+      }
+    ]
+
+    // Add pending request notification if there are pending dependents
+    if (pendingRequests > 0) {
+      feed.push({
+        id: 3,
+        type: 'pending',
+        title: 'Pending Policy Assignments',
+        description: `${pendingRequests} dependent${pendingRequests !== 1 ? 's' : ''} awaiting policy assignment`,
+        timestamp: 'Today'
+      })
+    }
+
+    feed.push(
+      {
+        id: 4,
+        type: 'enrollment',
+        title: 'Enrollment Period',
+        description: 'Annual benefits enrollment is currently active',
+        timestamp: 'January 15'
+      }
+    )
+
+    return feed
   }
 
-  async function handlePasswordChange(e:any){
-    e.preventDefault()
-    if (!currentPassword || !newPassword) return alert('Provide current and new password')
-    try{
-      const res:any = await api.changePassword({ currentPassword, newPassword })
-      if (res && (res.ok || res.success)) { alert('Password updated (demo)'); setCurrentPassword(''); setNewPassword('') }
-      else alert(res.error || 'Password change failed')
-    }catch(err:any){ alert(err.message || 'Request failed') }
+  const getActivityIcon = (type: string) => {
+    switch(type) {
+      case 'completed': return '✓'
+      case 'update': return '●'
+      case 'pending': return '⏳'
+      case 'enrollment': return '▶'
+      default: return '●'
+    }
+  }
+
+  const getActivityColor = (type: string) => {
+    switch(type) {
+      case 'completed': return '#10b981'
+      case 'update': return '#3b82f6'
+      case 'pending': return '#f59e0b'
+      case 'enrollment': return '#8b5cf6'
+      default: return '#6b7280'
+    }
+  }
+
+  const handleDownloadPolicy = (policy: Policy) => {
+    // Create a mock policy document download
+    const policyContent = `
+POLICY DOCUMENT
+===============
+
+Policy Name: ${policy.name || 'Insurance Policy'}
+Policy Number: ${policy.policyNumber || 'N/A'}
+Coverage Type: ${policy.coverageType || 'Standard'}
+Status: ${policy.status || 'Active'}
+
+Description:
+${policy.description || 'This is your insurance policy document.'}
+
+Coverage Details:
+- Medical Coverage: Included
+- Dental Coverage: Included
+- Vision Coverage: Included
+- Life Insurance: Included
+
+Terms & Conditions:
+This policy is effective from January 1, 2026 through December 31, 2026.
+All coverages are subject to the terms and conditions outlined in this document.
+
+Generated: ${new Date().toLocaleDateString()}
+    `
+
+    const blob = new Blob([policyContent], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${policy.policyNumber || 'policy'}-${policy.name?.replace(/\s+/g, '-')}.txt`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
   }
 
   return (
-    <div className="main-area">
-      <header className="page-header">
-        <div className="left-banner">
-          <div className="sub">Employee • Dashboard</div>
-          <h1>Welcome{profileName ? `, ${profileName}` : ''}</h1>
-        </div>
-        <div className="actions">
-          <button className="btn-ghost" onClick={()=>navigate('/employee')}>View My Profile</button>
-          <button className="btn-ghost" onClick={()=>navigate('/employee/dependents')}>Manage Dependents</button>
-        </div>
-      </header>
-
-      {/* Dashboard Statistics Section */}
-      <DashboardStats />
-
-      {/* Main Content Grid */}
-      <div style={{display:'grid', gridTemplateColumns:'1fr 340px', gap:'20px', padding:'0 24px 32px', flex: 1}}>
-        {/* Left Panel - Recent Activity & Employees */}
-        <div style={{display:'flex', flexDirection:'column', gap:'20px'}}>
-          {/* Recent Activity Section */}
-          <RecentActivity />
-
-          {/* All Employees Section */}
-          {employees.length > 0 && (
-            <div style={{
-              background:'white',
-              borderRadius:'12px',
-              border:'1px solid #e6e9ef',
-              boxShadow:'0 2px 8px rgba(0,0,0,0.08)',
-              overflow:'hidden'
-            }}>
-              <div style={{
-                padding:'16px 20px',
-                background:'linear-gradient(90deg, #f6f8fb 0%, #ffffff 100%)',
-                borderBottom:'1px solid #e6e9ef'
-              }}>
-                <h3 style={{margin:'0', fontSize:'16px', fontWeight:'600', color:'#0f172a'}}>All Employees</h3>
-              </div>
-
-              <div style={{
-                padding:'12px',
-                display:'flex',
-                flexDirection:'column',
-                gap:'8px',
-                maxHeight:'400px',
-                overflowY:'auto'
-              }}>
-                <div style={{padding:'8px 12px'}}>
-                  <input placeholder="Search employees..." onChange={e=>{/* TODO: filter */}} style={{
-                    width:'100%',
-                    padding:'8px 12px',
-                    border:'1px solid #e6e9ef',
-                    borderRadius:'8px',
-                    fontSize:'14px'
-                  }} />
-                </div>
-
-                {employees.map(emp=> (
-                  <div key={emp.id || emp.employeeId} style={{
-                    padding:'12px',
-                    borderRadius:'10px',
-                    background:'linear-gradient(180deg,#ffffff,#fbfcff)',
-                    border:'1px solid #eef2f8',
-                    cursor:'pointer',
-                    transition:'all 0.2s ease'
-                  }}
-                  onClick={()=>openEmployeeModal(emp)}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-2px)'
-                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(11,35,76,0.08)'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)'
-                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(11,35,76,0.03)'
-                  }}
-                  >
-                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
-                      <div style={{display:'flex', gap:'12px', flex:1}}>
-                        <div style={{
-                          width:'40px',
-                          height:'40px',
-                          borderRadius:'8px',
-                          background:'linear-gradient(135deg,#7c3aed,#06b6d4)',
-                          color:'white',
-                          display:'flex',
-                          alignItems:'center',
-                          justifyContent:'center',
-                          fontSize:'14px',
-                          fontWeight:'600',
-                          flexShrink:0
-                        }}>
-                          {(emp.user?.name||emp.name||'--').split(' ').map((s:string)=>s[0]).slice(0,2).join('')}
-                        </div>
-                        <div style={{minWidth:0}}>
-                          <strong style={{fontSize:'14px', color:'#0f172a'}}>{emp.user?.name || emp.name || 'Unnamed'}</strong>
-                          <div style={{fontSize:'13px', color:'#6b7280', marginTop:'2px'}}>{emp.user?.email || emp.email || ''}</div>
-                          <div style={{fontSize:'12px', color:'#9ca3af', marginTop:'2px'}}>ID: {emp.externalId || emp.employeeId || emp.id}</div>
-                        </div>
-                      </div>
-                      <button className="btn-ghost" onClick={(e) => { e.stopPropagation(); navigate(`/hr/employees/personal/${emp.id}`) }} style={{fontSize:'12px', padding:'4px 8px'}}>View</button>
-                    </div>
-                  </div>
-                ))}
-                {employees.length === 0 && <div style={{textAlign:'center', color:'#9ca3af', padding:'20px'}}>No employees found</div>}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Right Panel - Quick Actions & Profile Settings */}
-        <aside style={{display:'flex', flexDirection:'column', gap:'20px'}}>
-          {/* Quick Actions Card */}
+    <RequireRole role="EMPLOYEE">
+      <div style={{ backgroundColor: '#f8fafc', minHeight: '100vh' }}>
+        {loading && (
           <div style={{
-            background:'white',
-            borderRadius:'12px',
-            border:'1px solid #e6e9ef',
-            boxShadow:'0 2px 8px rgba(0,0,0,0.08)',
-            overflow:'hidden'
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 50
           }}>
-            <div style={{
-              padding:'16px 20px',
-              background:'linear-gradient(90deg, #f6f8fb 0%, #ffffff 100%)',
-              borderBottom:'1px solid #e6e9ef'
-            }}>
-              <h3 style={{margin:'0', fontSize:'16px', fontWeight:'600', color:'#0f172a'}}>Quick Actions</h3>
-            </div>
-
-            <div style={{padding:'16px', display:'flex', flexDirection:'column', gap:'8px'}}>
-              <button className="btn-ghost" onClick={()=>navigate('/employee')} style={{textAlign:'left'}}>View My Profile</button>
-              <button className="btn-ghost" onClick={openDependentsModal} style={{textAlign:'left'}}>Manage Dependents</button>
-              <button className="btn-ghost" onClick={()=>alert('Download started (demo)')} style={{textAlign:'left'}}>Download Policy Document</button>
-              <button className="btn-ghost" onClick={()=>{ const text = prompt('Describe issue for support (demo):'); if (text) alert('Support request submitted (demo)') }} style={{textAlign:'left'}}>Raise Support Request</button>
+            <div style={{ backgroundColor: '#fff', borderRadius: '12px', padding: '32px', textAlign: 'center' }}>
+              <Loader size={40} style={{ margin: '0 auto 16px', animation: 'spin 1s linear infinite', color: '#6366f1' }} />
+              <p style={{ color: '#6b7280', margin: 0 }}>Loading your dashboard...</p>
             </div>
           </div>
+        )}
 
-          {/* Profile Settings Card */}
+        {error && (
           <div style={{
-            background:'white',
-            borderRadius:'12px',
-            border:'1px solid #e6e9ef',
-            boxShadow:'0 2px 8px rgba(0,0,0,0.08)',
-            overflow:'hidden'
+            backgroundColor: '#fee2e2',
+            border: '1px solid #fca5a5',
+            borderRadius: '8px',
+            padding: '16px',
+            margin: '24px',
+            color: '#991b1b'
           }}>
-            <div style={{
-              padding:'16px 20px',
-              background:'linear-gradient(90deg, #f6f8fb 0%, #ffffff 100%)',
-              borderBottom:'1px solid #e6e9ef'
-            }}>
-              <h3 style={{margin:'0', fontSize:'16px', fontWeight:'600', color:'#0f172a'}}>Profile Settings</h3>
-            </div>
-
-            <div style={{padding:'16px', display:'flex', flexDirection:'column', gap:'12px'}}>
-              <div>
-                <label style={{fontSize:'12px', color:'#6b7280', display:'block', marginBottom:'4px', fontWeight:'500'}}>Name</label>
-                <input placeholder="Name" value={profileName} onChange={e=>setProfileName(e.target.value)} style={{
-                  width:'100%',
-                  padding:'8px 12px',
-                  border:'1px solid #e6e9ef',
-                  borderRadius:'8px',
-                  fontSize:'14px',
-                  boxSizing:'border-box'
-                }} />
-              </div>
-
-              <div>
-                <label style={{fontSize:'12px', color:'#6b7280', display:'block', marginBottom:'4px', fontWeight:'500'}}>Email</label>
-                <input placeholder="Email" value={profileEmail} onChange={e=>setProfileEmail(e.target.value)} style={{
-                  width:'100%',
-                  padding:'8px 12px',
-                  border:'1px solid #e6e9ef',
-                  borderRadius:'8px',
-                  fontSize:'14px',
-                  boxSizing:'border-box'
-                }} />
-              </div>
-
-              <button className="btn-ghost" onClick={async ()=>{ const res:any = await api.updateProfile({ name: profileName, email: profileEmail }); if (res && (res.ok || res.employee)) alert('Profile updated (demo)'); else alert(res.error || 'Update failed') }} style={{width:'100%'}}>Save Changes</button>
-
-              <hr style={{border:'none', borderTop:'1px solid #e6e9ef', margin:'8px 0'}} />
-
-              <div>
-                <label style={{fontSize:'12px', color:'#6b7280', display:'block', marginBottom:'8px', fontWeight:'600'}}>Change Password</label>
-                <form onSubmit={handlePasswordChange} style={{display:'flex', flexDirection:'column', gap:'8px'}}>
-                  <input type="password" placeholder="Current password" value={currentPassword} onChange={e=>setCurrentPassword(e.target.value)} style={{
-                    width:'100%',
-                    padding:'8px 12px',
-                    border:'1px solid #e6e9ef',
-                    borderRadius:'8px',
-                    fontSize:'14px',
-                    boxSizing:'border-box'
-                  }} />
-                  <input type="password" placeholder="New password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} style={{
-                    width:'100%',
-                    padding:'8px 12px',
-                    border:'1px solid #e6e9ef',
-                    borderRadius:'8px',
-                    fontSize:'14px',
-                    boxSizing:'border-box'
-                  }} />
-                  <button type="submit" style={{width:'100%'}}>Update Password</button>
-                </form>
-              </div>
-            </div>
+            <p style={{ fontSize: '14px', margin: 0 }}>⚠️ {error}</p>
           </div>
-        </aside>
+        )}
+      <div style={{
+        background: 'linear-gradient(135deg, #6366f1 0%, #3b82f6 100%)',
+        color: '#fff',
+        padding: '32px 24px',
+        borderBottom: 'none'
+      }}>
+        <div style={{ maxWidth: '1400px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '20px' }}>
+          <div>
+            <h1 style={{ fontSize: '32px', fontWeight: '700', margin: '0 0 8px 0' }}>
+              Welcome, {employee?.user?.name || employee?.firstName || employee?.name || 'Employee'}
+            </h1>
+            <p style={{ fontSize: '16px', opacity: 0.9, margin: 0 }}>
+              Manage your benefits and insurance coverage
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => navigate('/employee')}
+              style={{
+                padding: '10px 16px',
+                backgroundColor: 'rgba(255,255,255,0.2)',
+                color: '#fff',
+                border: '1px solid rgba(255,255,255,0.3)',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                backdropFilter: 'blur(10px)'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.3)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)'
+              }}
+            >
+              View My Profile
+            </button>
+            <button
+              onClick={() => navigate('/employee/dependents')}
+              style={{
+                padding: '10px 16px',
+                backgroundColor: 'rgba(255,255,255,0.2)',
+                color: '#fff',
+                border: '1px solid rgba(255,255,255,0.3)',
+                borderRadius: '8px',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                backdropFilter: 'blur(10px)'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.3)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)'
+              }}
+            >
+              Manage Dependents
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Employee Detail Modal */}
-      {showModal && selected && (
-        <div style={{position:'fixed',inset:0,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.28)', zIndex: 1000}}>
-          <div className="center-card" style={{width:900, maxWidth:'95%', maxHeight:'90%', overflow:'auto', borderRadius:12}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center', marginBottom: '16px'}}>
-              <h2 style={{margin:0}}>{selected.user?.name || selected.name}</h2>
-              <button className="btn-ghost" onClick={()=>{ setShowModal(false); setSelected(null); setModalDependents([]) }}>Close</button>
+      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '32px 24px' }}>
+        {/* KPI Cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px', marginBottom: '32px' }}>
+          {/* Organization Card */}
+          <div style={{
+            backgroundColor: '#fff',
+            borderRadius: '12px',
+            padding: '20px',
+            border: '1px solid #e5e7eb',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+              <div style={{ width: '40px', height: '40px', backgroundColor: '#e0e7ff', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Building2 size={20} style={{ color: '#6366f1' }} />
+              </div>
+              <span style={{ fontSize: '12px', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>My Organization</span>
             </div>
+            <p style={{ fontSize: '24px', fontWeight: '700', color: '#111827', margin: 0 }}>
+              {employee?.company || 'Your Company'}
+            </p>
+            <p style={{ fontSize: '13px', color: '#6b7280', margin: '8px 0 0 0' }}>Active Member</p>
+          </div>
 
-            <div style={{display:'grid',gridTemplateColumns:'220px 1fr',gap:16}}>
-              <div style={{textAlign:'center'}}>
-                <div style={{width:160,height:160,borderRadius:12,background:'linear-gradient(135deg,#7c3aed,#06b6d4)',color:'white',display:'flex',alignItems:'center',justifyContent:'center',fontSize:28,margin:'0 auto'}}>
-                  {(selected.user?.name||selected.name||'--').split(' ').map((s:string)=>s[0]).slice(0,2).join('')}
-                </div>
-                <div style={{marginTop:12}}>
-                  <div className="muted-small">Employee ID</div>
-                  <div><strong>{selected.externalId || selected.employeeId || selected.id}</strong></div>
-                </div>
+          {/* Total Dependents Card */}
+          <div style={{
+            backgroundColor: '#fff',
+            borderRadius: '12px',
+            padding: '20px',
+            border: '1px solid #e5e7eb',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+              <div style={{ width: '40px', height: '40px', backgroundColor: '#fef3c7', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Users size={20} style={{ color: '#f59e0b' }} />
+              </div>
+              <span style={{ fontSize: '12px', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Total Dependents</span>
+            </div>
+            <p style={{ fontSize: '24px', fontWeight: '700', color: '#111827', margin: 0 }}>
+              {dependents.length}
+            </p>
+            <p style={{ fontSize: '13px', color: '#6b7280', margin: '8px 0 0 0' }}>Family members covered</p>
+          </div>
+
+          {/* Active Policies Card */}
+          <div style={{
+            backgroundColor: '#fff',
+            borderRadius: '12px',
+            padding: '20px',
+            border: '1px solid #e5e7eb',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+              <div style={{ width: '40px', height: '40px', backgroundColor: '#d1fae5', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Shield size={20} style={{ color: '#10b981' }} />
+              </div>
+              <span style={{ fontSize: '12px', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Active Policies</span>
+            </div>
+            <p style={{ fontSize: '24px', fontWeight: '700', color: '#111827', margin: 0 }}>
+              {policies.filter(p => p.status === 'active' || !p.status).length}
+            </p>
+            <p style={{ fontSize: '13px', color: '#6b7280', margin: '8px 0 0 0' }}>Enrolled plans</p>
+          </div>
+
+          {/* Pending Requests Card */}
+          <div style={{
+            backgroundColor: '#fff',
+            borderRadius: '12px',
+            padding: '20px',
+            border: '1px solid #e5e7eb',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+              <div style={{ width: '40px', height: '40px', backgroundColor: '#ede9fe', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Clock size={20} style={{ color: '#8b5cf6' }} />
+              </div>
+              <span style={{ fontSize: '12px', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase' }}>Pending Requests</span>
+            </div>
+            <p style={{ fontSize: '24px', fontWeight: '700', color: '#111827', margin: 0 }}>
+              {pendingRequests}
+            </p>
+            <p style={{ fontSize: '13px', color: '#6b7280', margin: '8px 0 0 0' }}>Awaiting action</p>
+          </div>
+        </div>
+
+        {/* Main Content Grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: '24px', alignItems: 'start' }}>
+          {/* Left Column */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {/* My Policies Section */}
+            <div style={{
+              backgroundColor: '#fff',
+              borderRadius: '12px',
+              border: '1px solid #e5e7eb',
+              overflow: 'hidden',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+            }}>
+              <div style={{
+                padding: '20px',
+                borderBottom: '1px solid #e5e7eb',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <h2 style={{ fontSize: '18px', fontWeight: '700', color: '#111827', margin: 0 }}>My Policies</h2>
+                <span style={{ fontSize: '12px', fontWeight: '600', color: '#6b7280', backgroundColor: '#f3f4f6', padding: '4px 8px', borderRadius: '6px' }}>
+                  {policies.length}
+                </span>
               </div>
 
-              <div>
-                <h4>Personal Info</h4>
-                <div className="row"><div style={{flex:1}}><strong>Name</strong><div className="muted-small">{selected.user?.name || selected.name}</div></div><div style={{flex:1}}><strong>Email</strong><div className="muted-small">{selected.user?.email || selected.email}</div></div></div>
-                <div className="row"><div style={{flex:1}}><strong>Gender</strong><div className="muted-small">{selected.gender || '—'}</div></div><div style={{flex:1}}><strong>DOB</strong><div className="muted-small">{selected.dob || '—'}</div></div></div>
-
-                <h4 style={{marginTop:12}}>Employment Details</h4>
-                <div className="row"><div style={{flex:1}}><strong>Designation</strong><div className="muted-small">{selected.designation || '—'}</div></div><div style={{flex:1}}><strong>Date of Joining</strong><div className="muted-small">{selected.doj || '—'}</div></div></div>
-
-                <h4 style={{marginTop:12}}>Policy</h4>
-                <div className="row"><div style={{flex:1}}><strong>Policy</strong><div className="muted-small">{selected.policy?.name || 'Not enrolled'}</div></div>
-                <div style={{flex:1}}><strong>Policy No.</strong><div className="muted-small">{selected.policy?.policyNumber || '—'}</div></div></div>
-
-                <h4 style={{marginTop:12}}>Dependents</h4>
-                <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                  {modalDependents.length === 0 && <div className="empty">No dependents</div>}
-                  {modalDependents.map(d=> (
-                    <div key={d.id} className="dependent-item">
-                      <div style={{flex:1}}>
-                        <strong>{d.name}</strong>
-                        <div className="muted-small">{d.relation} • {d.dob || ''}</div>
+              <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {policies.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px 20px', color: '#6b7280' }}>
+                    <Shield size={40} style={{ margin: '0 auto 12px', opacity: 0.5 }} />
+                    <p style={{ fontSize: '14px', fontWeight: '500' }}>No policies available</p>
+                  </div>
+                ) : (
+                  policies.map((policy, idx) => (
+                    <div
+                      key={policy.id || idx}
+                      style={{
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '10px',
+                        padding: '16px',
+                        backgroundColor: '#f9fafb',
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.borderColor = '#d1d5db'
+                        e.currentTarget.style.backgroundColor = '#ffffff'
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.borderColor = '#e5e7eb'
+                        e.currentTarget.style.backgroundColor = '#f9fafb'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: '12px' }}>
+                        <div style={{ flex: 1 }}>
+                          <h3 style={{ fontSize: '15px', fontWeight: '700', color: '#111827', margin: 0 }}>
+                            {policy.name || 'Insurance Policy'}
+                          </h3>
+                          <div style={{ fontSize: '13px', color: '#6b7280', marginTop: '4px' }}>
+                            {policy.coverageType || 'Coverage'} • {policy.policyNumber || 'Policy'}
+                          </div>
+                          <div style={{
+                            display: 'inline-block',
+                            marginTop: '8px',
+                            padding: '4px 8px',
+                            backgroundColor: '#d1fae5',
+                            color: '#065f46',
+                            borderRadius: '6px',
+                            fontSize: '12px',
+                            fontWeight: '600'
+                          }}>
+                            ✓ Active
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleDownloadPolicy(policy)}
+                          style={{
+                            padding: '8px 12px',
+                            backgroundColor: '#f3f4f6',
+                            border: '1px solid #d1d5db',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            fontSize: '13px',
+                            fontWeight: '600',
+                            color: '#374151',
+                            transition: 'all 0.2s',
+                            whiteSpace: 'nowrap'
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.backgroundColor = '#e5e7eb'
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.backgroundColor = '#f3f4f6'
+                          }}
+                        >
+                          <Download size={14} />
+                          Download
+                        </button>
                       </div>
-                      <div className="row"><button className="btn-ghost" onClick={()=>alert('Manage dependent (demo)')}>Manage</button></div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Recent Activity Section */}
+            <div style={{
+              backgroundColor: '#fff',
+              borderRadius: '12px',
+              border: '1px solid #e5e7eb',
+              overflow: 'hidden',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+            }}>
+              <div style={{
+                padding: '20px',
+                borderBottom: '1px solid #e5e7eb'
+              }}>
+                <h2 style={{ fontSize: '18px', fontWeight: '700', color: '#111827', margin: 0 }}>Recent Activity</h2>
+              </div>
+
+              <div style={{ padding: '20px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {getActivityFeed().map((activity, idx) => (
+                    <div key={activity.id} style={{ display: 'flex', gap: '16px' }}>
+                      {/* Timeline line */}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                        <div
+                          style={{
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '50%',
+                            backgroundColor: getActivityColor(activity.type),
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#fff',
+                            fontWeight: 'bold',
+                            fontSize: '16px'
+                          }}
+                        >
+                          {getActivityIcon(activity.type)}
+                        </div>
+                        {idx < getActivityFeed().length - 1 && (
+                          <div
+                            style={{
+                              width: '2px',
+                              height: '48px',
+                              backgroundColor: '#e5e7eb',
+                              margin: '8px 0'
+                            }}
+                          />
+                        )}
+                      </div>
+
+                      {/* Activity content */}
+                      <div style={{ flex: 1, paddingTop: '4px' }}>
+                        <h4 style={{ fontSize: '14px', fontWeight: '700', color: '#111827', margin: '0 0 4px 0' }}>
+                          {activity.title}
+                        </h4>
+                        <p style={{ fontSize: '13px', color: '#6b7280', margin: '0 0 4px 0' }}>
+                          {activity.description}
+                        </p>
+                        <span style={{ fontSize: '12px', color: '#9ca3af' }}>
+                          {activity.timestamp}
+                        </span>
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
 
-      {/* Dependents Modal */}
-      {showDependentsModal && (
-        <div style={{position:'fixed',inset:0,display:'flex',alignItems:'center',justifyContent:'center',background:'rgba(0,0,0,0.28)', zIndex: 1000}}>
-          <div style={{background:'white', borderRadius:'12px', padding:'24px', maxWidth:'600px', width:'90%', maxHeight:'80%', overflowY:'auto', boxShadow:'0 20px 25px rgba(0,0,0,0.15)'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center', marginBottom: '20px'}}>
-              <h2 style={{margin:'0', fontSize:'20px', fontWeight:'600', color:'#0f172a'}}>My Dependents</h2>
-              <button className="btn-ghost" onClick={()=>setShowDependentsModal(false)} style={{padding:'4px 8px'}}>✕</button>
+          {/* Right Sidebar - Quick Actions */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Quick Actions Card */}
+            <div style={{
+              backgroundColor: '#fff',
+              borderRadius: '12px',
+              border: '1px solid #e5e7eb',
+              overflow: 'hidden',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+            }}>
+              <div style={{
+                padding: '16px',
+                borderBottom: '1px solid #e5e7eb',
+                background: 'linear-gradient(90deg, #f8fafc 0%, #ffffff 100%)'
+              }}>
+                <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#111827', margin: 0 }}>Quick Actions</h3>
+              </div>
+
+              <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <button
+                  onClick={() => navigate('/employee/dependents')}
+                  style={{
+                    padding: '12px 16px',
+                    backgroundColor: '#6366f1',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.backgroundColor = '#4f46e5'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.backgroundColor = '#6366f1'
+                  }}
+                >
+                  <span>Manage Dependents</span>
+                  <ChevronRight size={18} />
+                </button>
+
+                <button
+                  onClick={() => policies.length > 0 && handleDownloadPolicy(policies[0])}
+                  style={{
+                    padding: '12px 16px',
+                    backgroundColor: '#f3f4f6',
+                    color: '#374151',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: policies.length > 0 ? 'pointer' : 'not-allowed',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    transition: 'all 0.2s',
+                    opacity: policies.length > 0 ? 1 : 0.5
+                  }}
+                  disabled={policies.length === 0}
+                  onMouseEnter={e => {
+                    if (policies.length > 0) e.currentTarget.style.backgroundColor = '#e5e7eb'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.backgroundColor = '#f3f4f6'
+                  }}
+                >
+                  <Download size={16} />
+                  Download Policy
+                </button>
+
+                <button
+                  onClick={() => navigate('/employee')}
+                  style={{
+                    padding: '12px 16px',
+                    backgroundColor: '#f3f4f6',
+                    color: '#374151',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.backgroundColor = '#e5e7eb'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.backgroundColor = '#f3f4f6'
+                  }}
+                >
+                  <FileText size={16} />
+                  View My Profile
+                </button>
+
+                <button
+                  onClick={() => {
+                    const message = prompt('How can we help you?')
+                    if (message) alert('Support request submitted: ' + message)
+                  }}
+                  style={{
+                    padding: '12px 16px',
+                    backgroundColor: '#f3f4f6',
+                    color: '#374151',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    transition: 'all 0.2s'
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.backgroundColor = '#e5e7eb'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.backgroundColor = '#f3f4f6'
+                  }}
+                >
+                  <HelpCircle size={16} />
+                  Support
+                </button>
+              </div>
             </div>
 
-            {dependentsLoading && (
-              <div style={{textAlign:'center', padding:'40px', color:'#6b7280'}}>
-                <div style={{marginBottom:'12px'}}>Loading dependents...</div>
+            {/* Quick Stats Card */}
+            <div style={{
+              backgroundColor: '#fff',
+              borderRadius: '12px',
+              border: '1px solid #e5e7eb',
+              padding: '16px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+            }}>
+              <h3 style={{ fontSize: '14px', fontWeight: '700', color: '#111827', margin: '0 0 12px 0' }}>Your Coverage</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '12px', borderBottom: '1px solid #e5e7eb' }}>
+                  <span style={{ fontSize: '13px', color: '#6b7280' }}>Status</span>
+                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#10b981' }}>✓ Active</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '13px', color: '#6b7280' }}>Dependents Covered</span>
+                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#111827' }}>{dependents.length}</span>
+                </div>
               </div>
-            )}
+            </div>
 
-            {!dependentsLoading && dependentsError && (
-              <div style={{background:'#fee2e2', border:'1px solid #fecaca', borderRadius:'8px', padding:'12px', marginBottom:'16px', color:'#991b1b', fontSize:'14px'}}>
-                {dependentsError}
-              </div>
-            )}
-
-            {!dependentsLoading && !dependentsError && modalDependents.length === 0 && (
-              <div style={{textAlign:'center', padding:'40px', color:'#6b7280'}}>
-                <div style={{fontSize:'32px', marginBottom:'12px'}}>👶</div>
-                <div style={{fontWeight:'600', marginBottom:'8px'}}>No dependents yet</div>
-                <div style={{fontSize:'14px'}}>Add a dependent to enroll them for coverage</div>
-              </div>
-            )}
-
-            {!dependentsLoading && modalDependents.length > 0 && (
-              <div style={{display:'flex', flexDirection:'column', gap:'12px'}}>
-                {modalDependents.map((dep:any) => (
-                  <div key={dep.id} style={{border:'1px solid #e5e7eb', borderRadius:'8px', padding:'12px', background:'#f9fafb'}}>
-                    <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
-                      <div>
-                        <div style={{fontWeight:'600', color:'#0f172a', marginBottom:'4px'}}>{dep.name}</div>
-                        <div style={{fontSize:'13px', color:'#6b7280', marginBottom:'2px'}}>Relationship: {dep.relation}</div>
-                        <div style={{fontSize:'13px', color:'#6b7280', marginBottom:'2px'}}>DOB: {dep.dob || '—'}</div>
-                        {dep.gender && <div style={{fontSize:'13px', color:'#6b7280'}}>Gender: {dep.gender}</div>}
-                      </div>
-                      <button className="btn-ghost" onClick={()=>alert('Manage dependent feature coming soon')} style={{fontSize:'12px', padding:'4px 8px'}}>Edit</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div style={{marginTop:'20px', display:'flex', gap:'8px', justifyContent:'flex-end'}}>
-              <button className="btn-ghost" onClick={()=>setShowDependentsModal(false)}>Close</button>
-              <button className="btn-primary" onClick={()=>navigate('/employee/dependents')}>View Full Page</button>
+            {/* Help Card */}
+            <div style={{
+              backgroundColor: 'linear-gradient(135deg, #6366f1 0%, #3b82f6 100%)',
+              borderRadius: '12px',
+              padding: '16px',
+              color: '#fff',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+            }}>
+              <h3 style={{ fontSize: '14px', fontWeight: '700', margin: '0 0 8px 0' }}>Need Help?</h3>
+              <p style={{ fontSize: '13px', opacity: 0.9, margin: '0 0 12px 0' }}>
+                Contact our support team for any questions about your benefits.
+              </p>
+              <button
+                onClick={() => alert('Support contact: benefits@company.com | Phone: 1-800-XXX-XXXX')}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  backgroundColor: 'rgba(255,255,255,0.2)',
+                  color: '#fff',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  borderRadius: '6px',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.3)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.2)'
+                }}
+              >
+                Contact Support
+              </button>
             </div>
           </div>
         </div>
-      )}
-    </div>
+      </div>
+      </div>
+    </RequireRole>
   )
 }
+

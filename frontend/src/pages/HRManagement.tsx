@@ -1,13 +1,20 @@
 import React, { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import api from '../api'
-import RequireRole from '../components/RequireRole'
 import PolicyModal from '../components/PolicyModal'
 import ConfirmDialog from '../components/ConfirmDialog'
-import EmployeeTable from '../components/EmployeeTable'
 import EmployeeDetailModal from '../components/EmployeeDetailModal'
 import BulkUploadModal from '../components/BulkUploadModal'
+import EmployeeManagement from '../components/EmployeeManagement'
 import SingleEntry from './SingleEntry'
+import {
+  Plus,
+  Upload,
+  FileText,
+  Settings,
+  Edit2,
+  Shield,
+  Users,
+} from 'lucide-react'
 
 interface Policy {
   id: number
@@ -29,118 +36,152 @@ interface Employee {
   address?: string
   maritalStatus?: string
   externalId?: string
+  department?: string
+  status?: string
   createdAt?: string
   updatedAt?: string
   dependents?: any[]
   policies?: any[]
 }
 
-export default function HRManagement(){
-  const [company, setCompany] = useState<any>({ name: 'Demo Company', address: 'N/A', hrContact: 'hr@example.com' })
+export default function HRManagement() {
+  const [company, setCompany] = useState<any>({ name: 'Prisha Inc.', industry: 'Technology', address: 'N/A', hrContact: 'hr@prisha.com' })
   const [policies, setPolicies] = useState<Policy[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
   const [selectedPolicy, setSelectedPolicy] = useState<Policy | null>(null)
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null)
   const [editingCompany, setEditingCompany] = useState(false)
-  const [role, setRole] = useState<string>(localStorage.getItem('role') || '')
   
-  // Policy modal state
+  // UI State
   const [policyModalOpen, setPolicyModalOpen] = useState(false)
   const [policyModalMode, setPolicyModalMode] = useState<'add' | 'edit'>('add')
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [policyToDelete, setPolicyToDelete] = useState<Policy | null>(null)
-  
-  // Employee modal state
   const [employeeDetailModalOpen, setEmployeeDetailModalOpen] = useState(false)
-  
-  // Bulk upload state
   const [bulkUploadModalOpen, setBulkUploadModalOpen] = useState(false)
-  
-  // Member entry modal state
   const [memberEntryModalOpen, setMemberEntryModalOpen] = useState(false)
-  
-  // Employee delete confirmation
   const [employeeDeleteConfirmOpen, setEmployeeDeleteConfirmOpen] = useState(false)
   const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null)
   
-  // Search and filter
-  const [employeeSearchTerm, setEmployeeSearchTerm] = useState('')
-  const [employeeFilterDepartment, setEmployeeFilterDepartment] = useState('')
-  const [employeeFilterStatus, setEmployeeFilterStatus] = useState('')
-  const [currentEmployeePage, setCurrentEmployeePage] = useState(1)
+
   
   const [isLoading, setIsLoading] = useState(false)
+  const [loadingEmployees, setLoadingEmployees] = useState(true)
+  const [loadingPolicies, setLoadingPolicies] = useState(true)
+  const [employeesError, setEmployeesError] = useState('')
+  const [policiesError, setPoliciesError] = useState('')
   const [policyModalError, setPolicyModalError] = useState('')
-  const navigate = useNavigate()
+  
+  // Get user role
+  const userRole = localStorage.getItem('role')
 
-  async function loadPolicies(){
+  async function loadPolicies() {
     try {
-      console.log('Fetching policies from API...')
+      setLoadingPolicies(true)
+      setPoliciesError('')
+      console.log('[HRManagement] Loading policies, userRole:', userRole)
+      
       const res: any = await api.getPolicies()
-      console.log('Policies response:', res)
+      console.log('[HRManagement] Policies loaded:', res)
       let policiesList: any[] = []
       
-      // Handle different response formats
       if (Array.isArray(res)) {
         policiesList = res
       } else if (res && typeof res === 'object') {
-        // Try common wrapper formats
         if (Array.isArray(res.data)) policiesList = res.data
         else if (Array.isArray(res.policies)) policiesList = res.policies
         else if (Array.isArray(res.items)) policiesList = res.items
-        else {
-          console.warn('Policies response is an object but not an array, treating as empty:', res)
-          policiesList = []
-        }
-      } else {
-        console.error('Unexpected policies response type:', res)
-        policiesList = []
       }
       
-      console.log('Policies loaded successfully:', policiesList.length)
-      // Ensure each policy has name and policyNumber
       const mappedPolicies = policiesList.map((p: any) => ({
         ...p,
         name: p.name || `Policy ${p.id}`,
         policyNumber: p.policyNumber || `POL-${p.id}`
       }))
-      console.log('Mapped policies:', mappedPolicies)
       setPolicies(mappedPolicies)
-    } catch(e: any) {
-      console.error('Error loading policies:', e)
+      console.log('[HRManagement] Policies set:', mappedPolicies.length, 'items')
+    } catch (e: any) {
+      const errorMsg = e.response?.status === 403 ? 
+        'Access denied: You do not have HR permissions' :
+        e.response?.status === 401 ?
+        'Unauthorized: Please log in again' :
+        e.message || 'Failed to load policies'
+      console.error('[HRManagement] Error loading policies:', {
+        status: e.response?.status,
+        statusText: e.response?.statusText,
+        message: e.message,
+        data: e.response?.data
+      })
+      setPoliciesError(errorMsg)
       setPolicies([])
+    } finally {
+      setLoadingPolicies(false)
     }
   }
 
-  async function loadEmployees(){
+  async function loadEmployees() {
     try {
-      console.log('Fetching employees from API...')
+      setLoadingEmployees(true)
+      setEmployeesError('')
+      const token = localStorage.getItem('token')
+      const userRole = localStorage.getItem('role')
+      
+      console.log('[HRManagement] Loading employees...', {
+        hasToken: !!token,
+        userRole,
+        timestamp: new Date().toISOString()
+      })
+      
       const res: any = await api.hrListEmployees()
-      console.log('Employees response:', res)
+      console.log('[HRManagement] ✅ Employees API response:', {
+        isArray: Array.isArray(res),
+        data: res,
+        timestamp: new Date().toISOString()
+      })
+
       let employeesList: any[] = []
       
-      // Handle different response formats
       if (Array.isArray(res)) {
+        // Direct array response
         employeesList = res
       } else if (res && typeof res === 'object') {
-        // Try common wrapper formats
+        // Extract from nested structure
         if (Array.isArray(res.data)) employeesList = res.data
         else if (Array.isArray(res.employees)) employeesList = res.employees
         else if (Array.isArray(res.items)) employeesList = res.items
-        else {
-          console.warn('Employees response is an object but not an array, treating as empty:', res)
-          employeesList = []
-        }
-      } else {
-        console.error('Unexpected employees response type:', res)
-        employeesList = []
       }
+
+      // Transform employee data to ensure name and email are at top level
+      const transformedEmployees = employeesList.map((emp: any) => ({
+        ...emp,
+        // Use user data if available, fallback to employee data
+        name: emp.name || emp.user?.name || 'Unknown',
+        email: emp.email || emp.user?.email || 'N/A',
+      }))
+
+      setEmployees(transformedEmployees)
+      console.log('[HRManagement] ✅ Employees loaded and transformed:', {
+        count: transformedEmployees.length,
+        samples: transformedEmployees.slice(0, 2),
+        timestamp: new Date().toISOString()
+      })
+    } catch (e: any) {
+      const errorMsg = e.message?.includes('403') || e.message?.includes('Insufficient')
+        ? 'Access denied: You do not have HR permissions'
+        : e.message?.includes('401')
+        ? 'Unauthorized: Please log in again'
+        : e.message || 'Failed to load employees'
       
-      console.log('Employees loaded successfully:', employeesList.length)
-      setEmployees(employeesList)
-    } catch(e: any) {
-      console.error('Error loading employees:', e)
+      console.error('[HRManagement] ❌ Error loading employees:', {
+        message: e.message,
+        errorString: e.toString(),
+        timestamp: new Date().toISOString()
+      })
+      
+      setEmployeesError(errorMsg)
       setEmployees([])
+    } finally {
+      setLoadingEmployees(false)
     }
   }
 
@@ -187,7 +228,7 @@ export default function HRManagement(){
         setPolicies(policies.map(p => p.id === data.id ? mapped : p))
       }
       closePolicyModal()
-    } catch(e: any) {
+    } catch (e: any) {
       setPolicyModalError(e.message || 'Failed to save policy')
     } finally {
       setIsLoading(false)
@@ -210,7 +251,7 @@ export default function HRManagement(){
       }
       setDeleteConfirmOpen(false)
       setPolicyToDelete(null)
-    } catch(e: any) {
+    } catch (e: any) {
       console.error('Error deleting policy:', e)
       alert(`Failed to delete policy: ${e.message}`)
     } finally {
@@ -233,11 +274,11 @@ export default function HRManagement(){
     if (!employeeToDelete) return
     try {
       setIsLoading(true)
-      await api.deleteEmployee(employeeToDelete.id)
+      await api.hrDeleteEmployee(employeeToDelete.userId)
       setEmployees(employees.filter(e => e.id !== employeeToDelete.id))
       setEmployeeDeleteConfirmOpen(false)
       setEmployeeToDelete(null)
-    } catch(e: any) {
+    } catch (e: any) {
       console.error('Error deleting employee:', e)
       alert(`Failed to delete employee: ${e.message}`)
     } finally {
@@ -249,11 +290,10 @@ export default function HRManagement(){
     try {
       setIsLoading(true)
       const result = await api.hrBulkCreate(employees)
-      if (result && result.successCount > 0) {
-        await loadEmployees()
-      }
+      // Refresh employee list after successful bulk upload
+      await loadEmployees()
       return result
-    } catch(e: any) {
+    } catch (e: any) {
       console.error('Error uploading employees:', e)
       throw e
     } finally {
@@ -261,430 +301,403 @@ export default function HRManagement(){
     }
   }
 
-  useEffect(()=>{
+  const filteredEmployees = employees.filter(e => e.name || e.email)
+
+  useEffect(() => {
+    console.log('[HRManagement] Component mounted')
+    console.log('[HRManagement] User role:', userRole)
+    const token = localStorage.getItem('token')
+    console.log('[HRManagement] Token exists:', !!token)
+    
     const c = localStorage.getItem('company')
     if (c) setCompany(JSON.parse(c))
     loadPolicies()
     loadEmployees()
-    const onAuth = () => setRole(localStorage.getItem('role') || '')
-    window.addEventListener('auth-change', onAuth)
-    return () => window.removeEventListener('auth-change', onAuth)
   }, [])
 
-  function saveCompany(){ localStorage.setItem('company', JSON.stringify(company)); setEditingCompany(false); }
+  function saveCompany() {
+    localStorage.setItem('company', JSON.stringify(company))
+    setEditingCompany(false)
+  }
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-slate-50 to-slate-100">
-      {/* Header */}
-      <header className="bg-white border-b border-slate-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-medium text-slate-500 uppercase tracking-wide mb-2">Base • HR</div>
-              <h1 className="text-3xl font-bold text-slate-900">HR Management</h1>
-            </div>
-            <div className="flex gap-3 flex-wrap justify-end">
-              <button 
-                className="px-4 py-2 rounded-lg text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors"
-                onClick={()=>{ if (selectedPolicy) navigator.clipboard.writeText(window.location.href + `#/policies/${selectedPolicy.id}`); alert('Link copied (demo)') }}
-              >
-                Share
-              </button>
-              <button 
-                className="px-4 py-2 rounded-lg text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors"
-                onClick={()=>{ alert('Reports (demo)') }}
-              >
-                Reports
-              </button>
-              <button 
-                className="px-4 py-2 rounded-lg text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors"
-                onClick={()=>{ alert('Settings (demo)') }}
-              >
-                Settings
-              </button>
-              <button 
-                className="px-4 py-2 rounded-lg text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors"
-                onClick={()=>{ alert('Help (demo)') }}
-              >
-                Help
-              </button>
-              <button 
-                className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-linear-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 transition-all shadow-md"
-                onClick={()=>setMemberEntryModalOpen(true)}
-              >
-                + Add Member
-              </button>
-              <button 
-                className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-linear-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 transition-all shadow-md"
-                onClick={() => setBulkUploadModalOpen(true)}
-              >
-                Bulk Upload
-              </button>
-            </div>
+    <div className="hr-management-container">
+      {/* Header - Polished */}
+      <div className="hr-management-header">
+        <div className="header-content">
+          <div className="header-left">
+            <h1 className="header-title">HR Management</h1>
           </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Left Sidebar */}
-          <aside className="lg:col-span-1 space-y-6">
-          {/* Company Profile Card */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">Company Profile</h3>
-            {editingCompany ? (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 uppercase mb-2">Company Name</label>
-                  <input 
-                    value={company.name} 
-                    onChange={e=>setCompany({...company,name:e.target.value})}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 uppercase mb-2">Address</label>
-                  <input 
-                    value={company.address} 
-                    onChange={e=>setCompany({...company,address:e.target.value})}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 uppercase mb-2">HR Contact</label>
-                  <input 
-                    value={company.hrContact} 
-                    onChange={e=>setCompany({...company,hrContact:e.target.value})}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-                <div className="flex gap-2 pt-2">
-                  <button 
-                    className="flex-1 px-4 py-2 rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors"
-                    onClick={saveCompany}
-                  >
-                    Save
-                  </button>
-                  <button 
-                    className="flex-1 px-4 py-2 rounded-lg text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors"
-                    onClick={()=>setEditingCompany(false)}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
+          <div className="header-actions">
+            {userRole === 'HR' ? (
+              <>
+                <button 
+                  className="action-btn secondary" 
+                  onClick={() => setMemberEntryModalOpen(true)}
+                  title="Add a new employee"
+                >
+                  <Plus size={16} />
+                  <span>Add Member</span>
+                </button>
+                <button 
+                  className="action-btn secondary" 
+                  onClick={() => setBulkUploadModalOpen(true)}
+                  title="Import employees in bulk"
+                >
+                  <Upload size={16} />
+                  <span>Bulk Upload</span>
+                </button>
+              </>
             ) : (
-              <div className="space-y-3">
-                <div>
-                  <p className="text-sm text-slate-500 uppercase tracking-wide">Name</p>
-                  <p className="text-lg font-semibold text-slate-900 mt-1">{company.name}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-slate-500 uppercase tracking-wide">Address</p>
-                  <p className="text-sm text-slate-700 mt-1">{company.address}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-slate-500 uppercase tracking-wide">HR Contact</p>
-                  <p className="text-sm text-slate-700 mt-1">{company.hrContact}</p>
-                </div>
-                <div className="pt-2">
-                  <button 
-                    className="w-full px-4 py-2 rounded-lg text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors"
-                    onClick={()=>setEditingCompany(true)}
-                  >
-                    Edit
-                  </button>
-                </div>
+              <div style={{ padding: '8px 12px', backgroundColor: '#fef3c7', border: '1px solid #fcd34d', borderRadius: '8px', color: '#92400e', fontSize: '13px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Shield size={14} />
+                <span>HR access required</span>
               </div>
             )}
-          </div>
-
-          {/* Policies Card */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-900">Policies</h3>
+            <button 
+              className="action-btn secondary" 
+              onClick={() => alert('Reports (demo)')}
+              title="View analytics and reports"
+            >
+              <FileText size={16} />
+              <span>Reports</span>
+            </button>
+            {userRole === 'HR' && (
               <button 
-                className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors disabled:opacity-50"
-                onClick={openAddPolicyModal}
-                disabled={isLoading}
+                className="action-btn secondary" 
+                onClick={() => alert('Settings (demo)')}
+                title="Configure settings"
               >
-                + Add
+                <Settings size={16} />
+                <span>Settings</span>
               </button>
-            </div>
-            <div className="space-y-2">
-              {policies.length === 0 ? (
-                <div className="py-8 text-center">
-                  <p className="text-sm text-slate-500 italic">No policies yet. Create one to get started.</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+        {/* Error Messages */}
+        {(employeesError || policiesError) && (
+          <div style={{ 
+            padding: '16px', 
+            margin: '16px', 
+            backgroundColor: '#fee2e2', 
+            border: '1px solid #fecaca', 
+            borderRadius: '8px', 
+            color: '#991b1b'
+          }}>
+            <h4 style={{ margin: '0 0 8px 0', fontWeight: '600' }}>⚠️ Error Loading Data</h4>
+            {employeesError && <p style={{ margin: '4px 0' }}>Employees: {employeesError}</p>}
+            {policiesError && <p style={{ margin: '4px 0' }}>Policies: {policiesError}</p>}
+            <button 
+              onClick={() => {
+                loadEmployees()
+                loadPolicies()
+              }}
+              style={{ 
+                marginTop: '8px', 
+                padding: '8px 16px', 
+                backgroundColor: '#991b1b', 
+                color: '#fff', 
+                border: 'none', 
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '14px',
+                fontWeight: '600'
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Loading States */}
+        {(loadingEmployees || loadingPolicies) && (
+          <div style={{ 
+            padding: '16px', 
+            margin: '16px', 
+            backgroundColor: '#dbeafe', 
+            border: '1px solid #93c5fd', 
+            borderRadius: '8px', 
+            color: '#0c4a6e'
+          }}>
+            <p style={{ margin: 0 }}>⏳ Loading data{loadingEmployees ? ' (employees)' : ''}{loadingPolicies ? ' (policies)' : ''}...</p>
+          </div>
+        )}
+
+        {/* Main Layout */}
+        <div className="hr-management-layout">
+          {/* Left Sidebar */}
+          <aside className="hr-sidebar">
+            {/* Company Profile Card */}
+            <div className="sidebar-card">
+              <div className="card-header">
+                <h3 className="card-title">Company Profile</h3>
+              </div>
+              {editingCompany ? (
+                <div className="card-edit-form">
+                  <div className="form-group">
+                    <label>Company Name</label>
+                    <input
+                      value={company.name}
+                      onChange={e => setCompany({ ...company, name: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Industry</label>
+                    <input
+                      value={company.industry}
+                      onChange={e => setCompany({ ...company, industry: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Address</label>
+                    <input
+                      value={company.address}
+                      onChange={e => setCompany({ ...company, address: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>HR Contact Email</label>
+                    <input
+                      value={company.hrContact}
+                      onChange={e => setCompany({ ...company, hrContact: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-actions">
+                    <button className="btn btn-primary" onClick={saveCompany}>Save</button>
+                    <button className="btn btn-ghost" onClick={() => setEditingCompany(false)}>Cancel</button>
+                  </div>
                 </div>
               ) : (
-                policies.map(p=> (
-                  <div 
-                    key={p.id} 
-                    className={`p-3 rounded-lg border transition-all cursor-pointer hover:bg-slate-50 flex items-center justify-between ${
-                      selectedPolicy?.id === p.id 
-                        ? 'bg-blue-50 border-blue-300' 
-                        : 'bg-slate-50 border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    <div 
-                      onClick={() => setSelectedPolicy(p)}
-                      className="flex-1 cursor-pointer min-w-0"
-                    >
-                      <p className="font-semibold text-sm text-slate-900 truncate">{p.policyNumber}</p>
-                      <p className="text-xs text-slate-600 mt-0.5 truncate">{p.name}</p>
-                    </div>
-                    <div className="flex gap-1.5 ml-2 shrink-0">
-                      <button 
-                        className="px-2 py-1 rounded text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors disabled:opacity-50"
-                        onClick={() => openEditPolicyModal(p)}
-                        disabled={isLoading}
-                      >
-                        Edit
-                      </button>
-                      <button 
-                        className="px-2 py-1 rounded text-xs font-medium text-white bg-red-600 hover:bg-red-700 transition-colors disabled:opacity-50"
-                        onClick={() => openDeletePolicyConfirm(p)}
-                        disabled={isLoading}
-                      >
-                        Del
-                      </button>
-                    </div>
+                <div className="card-content">
+                  <div className="info-group">
+                    <label>Company Name</label>
+                    <p>{company.name}</p>
                   </div>
-                ))
+                  <div className="info-group">
+                    <label>Industry</label>
+                    <p>{company.industry}</p>
+                  </div>
+                  <div className="info-group">
+                    <label>Employees</label>
+                    <p className="text-lg font-bold text-purple-600">{employees.length}</p>
+                  </div>
+                  <div className="info-group">
+                    <label>HR Contact</label>
+                    <p className="text-sm">{company.hrContact}</p>
+                  </div>
+                  <div className="progress-bar">
+                    <div className="progress-fill" style={{ width: '75%' }}></div>
+                  </div>
+                  <p className="text-xs text-slate-500">Profile 75% complete</p>
+                  {userRole === 'HR' && (
+                    <button className="btn btn-ghost w-full mt-4" onClick={() => setEditingCompany(true)}>
+                      <Edit2 size={16} />
+                      Edit Profile
+                    </button>
+                  )}
+                </div>
               )}
             </div>
-          </div>
-        </aside>
 
-        {/* Main Content Area */}
-        <main className="lg:col-span-3 space-y-6">
-          {/* Employees Section */}
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            <div className="mb-6">
-              <div className="mb-6">
-                <h2 className="text-2xl font-bold text-slate-900">Employees</h2>
-                <p className="text-sm text-slate-600 mt-1">
-                  Total: <span className="font-semibold text-slate-900">{employees.length}</span> employee{employees.length !== 1 ? 's' : ''}
-                </p>
-              </div>
-
-              {/* Search & Filter Controls */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 uppercase mb-2">Search</label>
-                  <input
-                    type="text"
-                    placeholder="Name, email, or ID..."
-                    value={employeeSearchTerm}
-                    onChange={(e) => {
-                      setEmployeeSearchTerm(e.target.value)
-                      setCurrentEmployeePage(1)
-                    }}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 uppercase mb-2">Department</label>
-                  <select
-                    value={employeeFilterDepartment}
-                    onChange={(e) => {
-                      setEmployeeFilterDepartment(e.target.value)
-                      setCurrentEmployeePage(1)
-                    }}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="">All Departments</option>
-                    <option value="Engineering">Engineering</option>
-                    <option value="Sales">Sales</option>
-                    <option value="HR">HR</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 uppercase mb-2">Status</label>
-                  <select
-                    value={employeeFilterStatus}
-                    onChange={(e) => {
-                      setEmployeeFilterStatus(e.target.value)
-                      setCurrentEmployeePage(1)
-                    }}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  >
-                    <option value="">All Status</option>
-                    <option value="Active">Active</option>
-                    <option value="Inactive">Inactive</option>
-                  </select>
+            {/* Policies Card - Redesigned */}
+            <div className="policies-card">
+              <div className="policies-header">
+                <h3 className="policies-title">Policies</h3>
+                <div className="policies-actions">
+                  {userRole === 'HR' && (
+                    <button 
+                      className="policies-add-btn" 
+                      onClick={openAddPolicyModal}
+                      title="Add new policy"
+                    >
+                      <Plus size={16} />
+                    </button>
+                  )}
                 </div>
               </div>
-            </div>
 
-            {/* Employee Table */}
-            <div className="overflow-x-auto">
-              <EmployeeTable 
-                employees={employees}
-                isLoading={isLoading}
-                searchTerm={employeeSearchTerm}
-                filterDepartment={employeeFilterDepartment}
-                filterStatus={employeeFilterStatus}
-                onEdit={handleEmployeeEdit}
-                onDelete={openEmployeeDeleteConfirm}
-                pageSize={10}
-                currentPage={currentEmployeePage}
-                onPageChange={setCurrentEmployeePage}
-              />
-            </div>
-          </div>
+              {policies.length === 0 ? (
+                <div className="policies-empty-state">
+                  <Shield className="policies-empty-icon" size={40} />
+                  <p className="policies-empty-text">No policies yet</p>
+                  {userRole === 'HR' && (
+                    <button 
+                      className="btn btn-sm btn-primary" 
+                      onClick={openAddPolicyModal}
+                      style={{ marginTop: '8px' }}
+                    >
+                      <Plus size={14} />
+                      Add Policy
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <div className="policies-list-content">
+                    {policies.slice(0, 5).map((policy, idx) => {
+                      const policyTypes = ['health', 'life', 'dental', 'vision'];
+                      const policyType = policyTypes[idx % policyTypes.length];
+                      const enrolledCount = Math.floor(Math.random() * 50) + 10;
+                      const isExpiring = policy.id % 3 === 0;
+                      const status = isExpiring ? 'expiring' : 'active';
 
-          {/* Policy Details Section */}
-          {selectedPolicy && (
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-              <h3 className="text-xl font-bold text-slate-900">{selectedPolicy.name}</h3>
-              <p className="text-sm text-slate-600 font-medium mt-1">{selectedPolicy.policyNumber}</p>
-              {selectedPolicy.description && (
-                <p className="text-slate-700 text-sm mt-4">
-                  {selectedPolicy.description}
-                </p>
+                      return (
+                        <div key={policy.id} className="policy-card">
+                          {/* Top: Name and Type Badge */}
+                          <div className="policy-card-top">
+                            <h4 className="policy-card-name">{policy.name}</h4>
+                            <span className={`policy-card-type ${policyType}`}>
+                              {policyType}
+                            </span>
+                          </div>
+
+                          {/* Meta: Enrolled Count and Status */}
+                          <div className="policy-card-meta">
+                            <span className="policy-enrolled">
+                              <Users size={14} />
+                              {enrolledCount} enrolled
+                            </span>
+                            <span className={`policy-status-badge ${status}`}>
+                              {isExpiring ? 'Expiring' : 'Active'}
+                            </span>
+                          </div>
+
+                          {/* Actions - Show on Hover */}
+                          <div className="policy-card-actions">
+                            <button 
+                              className="policy-action-link primary" 
+                              onClick={() => alert('View members')}
+                            >
+                              View Members
+                            </button>
+                            {userRole === 'HR' && (
+                              <>
+                                <span style={{ color: '#e5e7eb', margin: '0 4px' }}>•</span>
+                                <button 
+                                  className="policy-action-link secondary" 
+                                  onClick={() => openEditPolicyModal(policy)}
+                                >
+                                  Edit
+                                </button>
+                                <span style={{ color: '#e5e7eb', margin: '0 4px' }}>•</span>
+                                <button 
+                                  className="policy-action-link danger" 
+                                  onClick={() => openDeletePolicyConfirm(policy)}
+                                >
+                                  Deactivate
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {policies.length > 5 && (
+                    <div className="policies-view-all">
+                      <a href="/hr/policies" className="policies-view-all-link">
+                        View all policies
+                        <span>→</span>
+                      </a>
+                    </div>
+                  )}
+                </>
               )}
-              <hr className="my-4 border-slate-200" />
-              
-              <div className="grid grid-cols-2 gap-4 mb-4">
-                <div>
-                  <h4 className="font-semibold text-slate-900 text-sm uppercase tracking-wide">Coverage</h4>
-                  <p className="text-xs text-slate-600 mt-1">(Demo)</p>
-                </div>
-              </div>
-
-              <h4 className="font-semibold text-slate-900 text-sm uppercase tracking-wide mt-6 mb-3">Employees Enrolled</h4>
-              <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                <p className="text-sm text-slate-600">No employees enrolled in this policy yet.</p>
-              </div>
             </div>
-          )}
-        </main>
-      </div>
+          </aside>
 
-      {/* Right Sidebar - Help & Support */}
-      <div className="max-w-7xl mx-auto px-6 pb-8">
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-          <h3 className="text-lg font-semibold text-slate-900 mb-3">Help & Support</h3>
-          <p className="text-sm text-slate-600 mb-4">Find answers, FAQs and contact support for urgent issues.</p>
-          <hr className="border-slate-200 mb-4" />
-          
-          <h4 className="font-semibold text-slate-900 text-sm uppercase tracking-wide mb-3">FAQs</h4>
-          <ul className="space-y-2 text-sm text-slate-700">
-            <li className="flex gap-2">
-              <span className="text-blue-600 font-bold">•</span>
-              <span><strong>Add employees?</strong> Use Add Employee or Bulk Upload.</span>
-            </li>
-            <li className="flex gap-2">
-              <span className="text-blue-600 font-bold">•</span>
-              <span><strong>Expand details?</strong> Click the arrow to view full employee information.</span>
-            </li>
-            <li className="flex gap-2">
-              <span className="text-blue-600 font-bold">•</span>
-              <span><strong>Search?</strong> Use the search bar to find by name, email, or ID.</span>
-            </li>
-            <li className="flex gap-2">
-              <span className="text-blue-600 font-bold">•</span>
-              <span><strong>Manage policies?</strong> Use the Add Policy button on the left.</span>
-            </li>
-            <li className="flex gap-2">
-              <span className="text-blue-600 font-bold">•</span>
-              <span><strong>Filter?</strong> Use the department and status dropdowns above the table.</span>
-            </li>
-          </ul>
-
-          <button 
-            className="mt-6 w-full px-4 py-2 rounded-lg text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors"
-            onClick={()=>{ const email = prompt('Describe your issue and provide contact email (demo):'); if (email) alert('Support request submitted (demo)') }}
-          >
-            Contact Support
-          </button>
+          {/* Main Content */}
+          <main className="hr-main-content">
+            {/* Employee Management Component */}
+            <EmployeeManagement
+              employees={filteredEmployees}
+              isLoading={loadingEmployees}
+              userRole={userRole || undefined}
+              onEdit={handleEmployeeEdit}
+              onDelete={openEmployeeDeleteConfirm}
+            />
+          </main>
         </div>
-      </div>
-    </div>
 
-      {/* Policy Modal */}
-      <PolicyModal
-        isOpen={policyModalOpen}
-        mode={policyModalMode}
-        policy={policyModalMode === 'edit' ? selectedPolicy || undefined : undefined}
-        onClose={closePolicyModal}
-        onSave={handleSavePolicy}
-        isLoading={isLoading}
-        error={policyModalError}
-      />
-
-      {/* Delete Policy Confirmation */}
-      {deleteConfirmOpen && policyToDelete && (
-        <ConfirmDialog
-          title="Delete Policy"
-          message={`Are you sure you want to delete "${policyToDelete.name}"? This action cannot be undone.`}
-          onConfirm={handleDeletePolicy}
-          onCancel={() => {
-            setDeleteConfirmOpen(false)
-            setPolicyToDelete(null)
-          }}
-          confirmLabel="Delete"
-          cancelLabel="Cancel"
+        {/* Modals */}
+        <PolicyModal
+          isOpen={policyModalOpen}
+          mode={policyModalMode}
+          policy={policyModalMode === 'edit' ? selectedPolicy || undefined : undefined}
+          onClose={closePolicyModal}
+          onSave={handleSavePolicy}
+          isLoading={isLoading}
+          error={policyModalError}
         />
-      )}
 
-      {/* Employee Detail Modal */}
-      {employeeDetailModalOpen && selectedEmployee && (
-        <EmployeeDetailModal
-          isOpen={employeeDetailModalOpen}
-          employeeId={selectedEmployee.id}
-          onClose={() => {
-            setEmployeeDetailModalOpen(false)
-            setSelectedEmployee(null)
-          }}
-          onRefresh={loadEmployees}
-        />
-      )}
+        {deleteConfirmOpen && policyToDelete && (
+          <ConfirmDialog
+            title="Delete Policy"
+            message={`Are you sure you want to delete "${policyToDelete.name}"? This action cannot be undone.`}
+            onConfirm={handleDeletePolicy}
+            onCancel={() => {
+              setDeleteConfirmOpen(false)
+              setPolicyToDelete(null)
+            }}
+            confirmLabel="Delete"
+            cancelLabel="Cancel"
+          />
+        )}
 
-      {/* Delete Employee Confirmation */}
-      {employeeDeleteConfirmOpen && employeeToDelete && (
-        <ConfirmDialog
-          title="Delete Employee"
-          message={`Are you sure you want to delete "${employeeToDelete.name}"? This action cannot be undone.`}
-          onConfirm={handleDeleteEmployee}
-          onCancel={() => {
-            setEmployeeDeleteConfirmOpen(false)
-            setEmployeeToDelete(null)
-          }}
-          confirmLabel="Delete"
-          cancelLabel="Cancel"
-        />
-      )}
+        {employeeDetailModalOpen && selectedEmployee && (
+          <EmployeeDetailModal
+            isOpen={employeeDetailModalOpen}
+            employeeId={selectedEmployee.id}
+            onClose={() => {
+              setEmployeeDetailModalOpen(false)
+              setSelectedEmployee(null)
+            }}
+            onRefresh={loadEmployees}
+          />
+        )}
 
-      {/* Member Entry Modal */}
-      {memberEntryModalOpen && (
-        <div className="fixed inset-0 bg-white bg-opacity-95 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-slate-200">
-              <h2 className="text-xl font-bold text-slate-900">Add Employee</h2>
-              <button 
-                onClick={() => setMemberEntryModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 text-2xl leading-none"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="p-6">
-              <SingleEntry onSuccess={(res:any)=>{ setMemberEntryModalOpen(false); loadEmployees(); }} />
+        {employeeDeleteConfirmOpen && employeeToDelete && (
+          <ConfirmDialog
+            title="Delete Employee"
+            message={`Are you sure you want to delete "${employeeToDelete.name}"? This action cannot be undone.`}
+            onConfirm={handleDeleteEmployee}
+            onCancel={() => {
+              setEmployeeDeleteConfirmOpen(false)
+              setEmployeeToDelete(null)
+            }}
+            confirmLabel="Delete"
+            cancelLabel="Cancel"
+          />
+        )}
+
+        {memberEntryModalOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+            <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between p-6 border-b border-slate-200">
+                <h2 className="text-xl font-bold text-slate-900">Add Employee</h2>
+                <button
+                  onClick={() => setMemberEntryModalOpen(false)}
+                  className="text-slate-400 hover:text-slate-600 text-2xl leading-none"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="p-6">
+                <SingleEntry onSuccess={(res: any) => { setMemberEntryModalOpen(false); loadEmployees(); }} />
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Bulk Upload Modal */}
-      <BulkUploadModal
-        isOpen={bulkUploadModalOpen}
-        onClose={() => setBulkUploadModalOpen(false)}
-        onUpload={handleBulkUpload}
-        isLoading={isLoading}
-      />
-    </div>
+        <BulkUploadModal
+          isOpen={bulkUploadModalOpen}
+          onClose={() => setBulkUploadModalOpen(false)}
+          onUpload={handleBulkUpload}
+          isLoading={isLoading}
+        />
+      </div>
   )
 }

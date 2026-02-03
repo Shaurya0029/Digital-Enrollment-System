@@ -16,6 +16,8 @@ export default function SingleEntry(props: Props){
   const [email, setEmail] = useState('')
   const [dependents, setDependents] = useState<Array<{name:string,relation:string,dob?:string,gender?:string,coverageStart?:string}>>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
 
   const [showDepModal, setShowDepModal] = useState(false)
   const [depForm, setDepForm] = useState({ name:'', relation:'', dob:'', gender:'', coverageStart:'' })
@@ -54,28 +56,82 @@ export default function SingleEntry(props: Props){
 
   async function handleSubmit(e?: React.FormEvent){
     if (e) e.preventDefault()
+    setErrorMessage('')
+    setSuccessMessage('')
     console.log('SingleEntry: submit started')
 
     // validations
-    if (!name || name.trim().length < 3) return alert('Employee name is required (min 3 chars)')
-    if (!employeeId) return alert('Employee ID is required')
-    if (!designation) return alert('Designation is required')
-    if (!doj) return alert('Date of joining is required')
-    if (new Date(doj) > new Date()) return alert('Date of joining cannot be in the future')
-    if (!dob) return alert('Date of birth is required')
+    if (!name || name.trim().length < 3) {
+      const msg = 'Employee name is required (min 3 chars)'
+      setErrorMessage(msg)
+      console.warn('[VALIDATION] ' + msg)
+      return
+    }
+    if (!employeeId) {
+      const msg = 'Employee ID is required'
+      setErrorMessage(msg)
+      console.warn('[VALIDATION] ' + msg)
+      return
+    }
+    if (!designation) {
+      const msg = 'Designation is required'
+      setErrorMessage(msg)
+      console.warn('[VALIDATION] ' + msg)
+      return
+    }
+    if (!doj) {
+      const msg = 'Date of joining is required'
+      setErrorMessage(msg)
+      console.warn('[VALIDATION] ' + msg)
+      return
+    }
+    if (new Date(doj) > new Date()) {
+      const msg = 'Date of joining cannot be in the future'
+      setErrorMessage(msg)
+      console.warn('[VALIDATION] ' + msg)
+      return
+    }
+    if (!dob) {
+      const msg = 'Date of birth is required'
+      setErrorMessage(msg)
+      console.warn('[VALIDATION] ' + msg)
+      return
+    }
     const age = (Date.now() - new Date(dob).getTime())/(1000*60*60*24*365.25)
-    if (age < 18) return alert('Employee must be at least 18 years old')
-    if (!mobile || !/^[0-9]{10}$/.test(mobile)) return alert('Mobile must be a 10-digit number')
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return alert('Valid email is required')
+    if (age < 18) {
+      const msg = 'Employee must be at least 18 years old'
+      setErrorMessage(msg)
+      console.warn('[VALIDATION] ' + msg)
+      return
+    }
+    if (!mobile || !/^[0-9]{10}$/.test(mobile)) {
+      const msg = 'Mobile must be a 10-digit number'
+      setErrorMessage(msg)
+      console.warn('[VALIDATION] ' + msg)
+      return
+    }
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      const msg = 'Valid email is required'
+      setErrorMessage(msg)
+      console.warn('[VALIDATION] ' + msg)
+      return
+    }
 
     // best-effort unique check
     try{
       const all:any = await api.hrListEmployees()
       if (Array.isArray(all)){
         const conflict = all.find((it:any)=> (String(it.employeeId || it.externalId || it.id) === String(employeeId)) && (!editingId || it.id !== editingId))
-        if (conflict) return alert('Employee ID already exists')
+        if (conflict) {
+          const msg = 'Employee ID already exists'
+          setErrorMessage(msg)
+          console.warn('[VALIDATION] ' + msg)
+          return
+        }
       }
-    }catch(_){ /* ignore network check errors */ }
+    }catch(e){ 
+      console.warn('[VALIDATION] Network check failed:', e)
+    }
 
     const payload:any = {
       name,
@@ -91,27 +147,38 @@ export default function SingleEntry(props: Props){
     }
 
     try{
-      console.log('SingleEntry: calling API', payload)
+      console.log('[API] Calling hrCreateEmployee with payload:', payload)
       setIsSubmitting(true)
+      setErrorMessage('')
       let res:any
       if (editingId){
+        console.log('[API] Mode: UPDATE employee ' + editingId)
         res = await api.hrUpdateEmployee(editingId, payload)
       }else{
+        console.log('[API] Mode: CREATE new employee')
         res = await api.hrCreateEmployee(payload)
       }
-      console.log('SingleEntry: api response', res)
+      console.log('[API] Response received:', res)
       const isNonEmptyObject = res && typeof res === 'object' && Object.keys(res).length !== 0
       const isTruthyPrimitive = !!res && (typeof res !== 'object')
       if (isNonEmptyObject || isTruthyPrimitive) {
         // treat non-empty object or any truthy primitive as success
-        if (onSuccess) onSuccess(res)
-        else navigate('/hr/employees')
+        console.log('[SUCCESS] Employee ' + (editingId ? 'updated' : 'created') + ' successfully')
+        setSuccessMessage('Employee ' + (editingId ? 'updated' : 'created') + ' successfully!')
+        setTimeout(() => {
+          if (onSuccess) onSuccess(res)
+          else navigate('/hr/employees')
+        }, 1000)
       } else {
-        alert('Employee creation returned unexpected response')
+        const msg = 'Employee creation returned unexpected response'
+        console.error('[ERROR] ' + msg, res)
+        setErrorMessage(msg)
       }
     }catch(err:any){
-      console.error('SingleEntry: api error', err)
-      alert(err?.message || 'failed')
+      const errMsg = err?.message || err?.error || 'Request failed'
+      console.error('[ERROR] API call failed:', err)
+      console.error('[ERROR] Error message:', errMsg)
+      setErrorMessage(errMsg)
     }finally{
       setIsSubmitting(false)
     }
@@ -147,6 +214,52 @@ export default function SingleEntry(props: Props){
 
   return (
     <div className="w-full">
+      {errorMessage && (
+        <div style={{
+          padding: '12px 16px',
+          marginBottom: '16px',
+          backgroundColor: '#fee2e2',
+          border: '1px solid #fca5a5',
+          borderRadius: '8px',
+          color: '#991b1b',
+          fontSize: '14px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <span>{errorMessage}</span>
+          <button
+            onClick={() => setErrorMessage('')}
+            style={{ background: 'none', border: 'none', color: '#991b1b', cursor: 'pointer', fontSize: '18px' }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {successMessage && (
+        <div style={{
+          padding: '12px 16px',
+          marginBottom: '16px',
+          backgroundColor: '#dcfce7',
+          border: '1px solid #86efac',
+          borderRadius: '8px',
+          color: '#166534',
+          fontSize: '14px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <span>✓ {successMessage}</span>
+          <button
+            onClick={() => setSuccessMessage('')}
+            style={{ background: 'none', border: 'none', color: '#166534', cursor: 'pointer', fontSize: '18px' }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Form Grid */}
         <div className="grid grid-cols-2 gap-4">

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Eye, EyeOff, Lock, Mail, Shield, Users, FileText, CheckCircle } from 'lucide-react'
 import api from '../api'
 
 type Role = 'HR' | 'EMPLOYEE'
@@ -30,7 +31,7 @@ export default function Login(): JSX.Element {
   const [loading, setLoading] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState<boolean>(false)
-  const [showRegister, setShowRegister] = useState<boolean>(false)
+
 
   // OTP state (HR only)
   const [otpMode, setOtpMode] = useState<boolean>(false)
@@ -45,9 +46,6 @@ export default function Login(): JSX.Element {
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  const roleTheme = 'from-purple-600 to-blue-500'
-  const primaryBtn = 'from-sky-500 to-blue-600'
 
   async function handleLogin(e?: React.FormEvent): Promise<void> {
     if (e) e.preventDefault()
@@ -148,112 +146,534 @@ export default function Login(): JSX.Element {
   }
 
   return (
-    <div className="app-login-root" style={{ background: '#f5f7fb' }}>
-      <div className="app-login-card">
-        <div className="app-login-left">
-          <h1 className="mt-4 text-3xl md:text-4xl font-extrabold text-gray-900">Hello, Welcome Back</h1>
-          <p className="mt-2 text-sm text-gray-500">Hey, welcome back to the login page of Prisha Policy</p>
-
-          <div className="mt-6 flex gap-3">
-            <button type="button" onClick={() => setSelectedRole('HR')} className={`px-4 py-2 rounded-full font-semibold text-sm transition-all duration-150 focus:outline-none ${selectedRole === 'HR' ? `text-white bg-linear-to-r ${roleTheme} shadow-md` : 'bg-gray-50 text-gray-700 border border-gray-200'}`}>Login as HR</button>
-            <button type="button" onClick={() => setSelectedRole('EMPLOYEE')} className={`px-4 py-2 rounded-full font-semibold text-sm transition-all duration-150 focus:outline-none ${selectedRole === 'EMPLOYEE' ? `text-white bg-linear-to-r ${roleTheme} shadow-md` : 'bg-gray-50 text-gray-700 border border-gray-200'}`}>Login as Member</button>
-          </div>
-
-          <div className="mt-4 flex items-center gap-6">
-            <label className="flex items-center gap-2 text-sm text-gray-600"><input type="radio" name="role" checked={selectedRole === 'EMPLOYEE'} onChange={() => setSelectedRole('EMPLOYEE')} className="w-4 h-4 accent-sky-500" />Member</label>
-            <label className="flex items-center gap-2 text-sm text-gray-600"><input type="radio" name="role" checked={selectedRole === 'HR'} onChange={() => setSelectedRole('HR')} className="w-4 h-4 accent-purple-600" />HR</label>
-          </div>
-
-          <form onSubmit={handleLogin} className="mt-6 space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">Email / Employee ID</label>
-              <input name="email" ref={emailRef} required value={email} onChange={e => setEmail(e.target.value)} autoComplete="username" className={`mt-1 block w-full rounded-lg border border-gray-200 px-3 py-2 shadow-sm focus:ring-2 focus:ring-opacity-50 ${selectedRole === 'HR' ? 'focus:ring-purple-300' : 'focus:ring-sky-300'}`} placeholder={selectedRole === 'HR' ? 'hr@example.com' : 'employee@example.com'} />
+    <div style={{
+      minHeight: '100vh',
+      backgroundColor: '#f8fafc',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '20px'
+    }}>
+      {/* Main Card Container */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        maxWidth: '1000px',
+        width: '100%',
+        backgroundColor: '#fff',
+        borderRadius: '16px',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.1)',
+        overflow: 'hidden',
+        minHeight: '600px'
+      }}>
+        {/* Left Column - Login Form */}
+        <div style={{
+          padding: '48px 40px',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          overflowY: 'auto'
+        }}>
+          {/* Header */}
+          <div>
+            {/* Logo and App Name */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '32px' }}>
+              <div style={{
+                width: '40px',
+                height: '40px',
+                background: 'linear-gradient(135deg, #6366f1 0%, #3b82f6 100%)',
+                borderRadius: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#fff',
+                fontWeight: '700',
+                fontSize: '20px'
+              }}>
+                P
+              </div>
+              <div>
+                <div style={{ fontSize: '18px', fontWeight: '700', color: '#111827' }}>Prisha Policy</div>
+                <div style={{ fontSize: '11px', color: '#6b7280', fontWeight: '600', textTransform: 'uppercase' }}>Digital Enrollment</div>
+              </div>
             </div>
 
-            {otpMode && selectedRole === 'HR' ? (
-              <div>
-                <label className="block text-sm font-medium text-gray-700">One-time code</label>
-                <div className="mt-1 relative">
-                  {otpSent ? (
-                    <>
-                      <input value={otpCode} onChange={e => setOtpCode(e.target.value)} placeholder="Enter code" className="block w-full rounded-lg border border-gray-200 px-3 py-2 shadow-sm focus:ring-2 focus:ring-purple-300" />
-                      <div className="mt-2 flex gap-2">
-                        <button type="button" onClick={verifyOtpAndRedirect} disabled={otpLoading || !otpCode} className={`px-4 py-2 rounded ${otpLoading ? 'bg-gray-400' : 'bg-purple-600 text-white'}`}>{otpLoading ? 'Verifying…' : 'Verify'}</button>
-                        <button type="button" onClick={() => { setOtpMode(false); setOtpSent(false); setOtpCode('') }} className="px-4 py-2 rounded border">Cancel</button>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="flex gap-2">
-                      <button type="button" onClick={requestOtp} className={`px-4 py-2 rounded ${otpLoading ? 'bg-gray-400' : 'bg-purple-600 text-white'}`}>{otpLoading ? 'Sending…' : 'Request OTP'}</button>
-                      <button type="button" onClick={() => setOtpMode(false)} className="px-4 py-2 rounded border">Back</button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Password</label>
-                <div className="mt-1 relative">
-                  <input name="password" ref={passwordRef} required type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" className={`block w-full rounded-lg border border-gray-200 px-3 py-2 shadow-sm focus:ring-2 focus:ring-opacity-50 ${selectedRole === 'HR' ? 'focus:ring-purple-300' : 'focus:ring-sky-300'}`} placeholder="Enter your password" />
-                  <button type="button" onClick={() => setShowPassword(s => !s)} className="absolute right-2 top-1/2 -translate-y-1/2 text-sm text-slate-600 px-2 py-1 rounded hover:bg-gray-100">{showPassword ? 'Hide' : 'Show'}</button>
-                </div>
-              </div>
-            )}
+            {/* Heading */}
+            <h1 style={{
+              fontSize: '28px',
+              fontWeight: '700',
+              color: '#111827',
+              margin: '0 0 8px 0'
+            }}>
+              Welcome Back
+            </h1>
+            <p style={{
+              fontSize: '14px',
+              color: '#6b7280',
+              margin: '0 0 32px 0'
+            }}>
+              Sign in to access your dashboard
+            </p>
 
-            {selectedRole === 'HR' && !otpMode && (
-              <div className="mt-2 text-sm text-right"><button type="button" onClick={() => setOtpMode(true)} className="text-purple-600 hover:underline">Use one-time code instead</button></div>
-            )}
-
-            <div className="flex items-center justify-between">
-              <label className="inline-flex items-center text-sm text-gray-600"><input type="checkbox" className="mr-2 h-4 w-4 accent-sky-500" checked={remember} onChange={e => setRemember(e.target.checked)} />Remember me</label>
-              <button type="button" onClick={() => void 0} className="text-sm text-sky-600 hover:underline">Forgot Password?</button>
-            </div>
-
-            {error && <div className="text-sm text-red-600">{error}</div>}
-
-            <div>
-              <button disabled={loading} type="submit" className={`w-full inline-flex justify-center items-center gap-2 px-4 py-3 rounded-lg text-white font-semibold shadow-lg transform transition-transform ${loading ? 'opacity-70 cursor-not-allowed' : 'hover:-translate-y-0.5'} bg-linear-to-r ${primaryBtn}`}>
-                {loading && (
-                  <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg>
-                )}
-                <span>{selectedRole === 'HR' ? 'Sign in as HR' : 'Sign in'}</span>
+            {/* Role Selector Tabs */}
+            <div style={{
+              display: 'flex',
+              gap: '12px',
+              marginBottom: '32px',
+              backgroundColor: '#f3f4f6',
+              padding: '6px',
+              borderRadius: '10px'
+            }}>
+              <button
+                onClick={() => setSelectedRole('HR')}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s',
+                  backgroundColor: selectedRole === 'HR' ? '#fff' : 'transparent',
+                  color: selectedRole === 'HR' ? '#6366f1' : '#6b7280',
+                  boxShadow: selectedRole === 'HR' ? '0 2px 8px rgba(99, 102, 241, 0.2)' : 'none'
+                }}
+              >
+                <Shield size={16} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
+                HR
+              </button>
+              <button
+                onClick={() => setSelectedRole('EMPLOYEE')}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  border: 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s',
+                  backgroundColor: selectedRole === 'EMPLOYEE' ? '#fff' : 'transparent',
+                  color: selectedRole === 'EMPLOYEE' ? '#3b82f6' : '#6b7280',
+                  boxShadow: selectedRole === 'EMPLOYEE' ? '0 2px 8px rgba(59, 130, 246, 0.2)' : 'none'
+                }}
+              >
+                <Users size={16} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
+                Employee
               </button>
             </div>
-          </form>
 
-          <div className="mt-6 text-center text-sm text-gray-500">
-            {selectedRole === 'HR' ? (
-              <>
-                Don't have an HR account? <button onClick={() => setShowRegister(s => !s)} className="text-sky-600 hover:underline">Register as HR</button>
-              </>
-            ) : (
-              <>
-                Need help? <button onClick={() => void 0} className="text-sky-600 hover:underline">Contact Support</button>
-              </>
-            )}
-          </div>
+            {/* Login Form */}
+            <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Email Input */}
+              <div>
+                <label style={{
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  color: '#374151',
+                  display: 'block',
+                  marginBottom: '8px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}>
+                  Email / Employee ID
+                </label>
+                <div style={{
+                  position: 'relative',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}>
+                  <Mail size={18} style={{
+                    position: 'absolute',
+                    left: '12px',
+                    color: '#9ca3af',
+                    pointerEvents: 'none'
+                  }} />
+                  <input
+                    ref={emailRef}
+                    type="text"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                    placeholder={selectedRole === 'HR' ? 'hr@example.com' : 'employee@example.com'}
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '12px 12px 12px 44px',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '10px',
+                      fontSize: '14px',
+                      transition: 'all 0.3s',
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                    onFocus={e => {
+                      e.currentTarget.style.borderColor = selectedRole === 'HR' ? '#6366f1' : '#3b82f6'
+                      e.currentTarget.style.boxShadow = `0 0 0 3px ${selectedRole === 'HR' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(59, 130, 246, 0.1)'}`
+                    }}
+                    onBlur={e => {
+                      e.currentTarget.style.borderColor = '#e5e7eb'
+                      e.currentTarget.style.boxShadow = 'none'
+                    }}
+                  />
+                </div>
+              </div>
 
-          {showRegister && selectedRole === 'HR' && (
-            <div style={{ marginTop: 16 }} className="card">
-              <h3>Register HR Account</h3>
-              <form onSubmit={async e => { e.preventDefault(); const res: any = await api.hrRegister({ email, password, name: '' }); if (res && res.ok) { alert('Registered (demo). Please login.'); setShowRegister(false) } else alert(res.error || 'Register failed') }}>
-                <input placeholder="HR name" onChange={() => { }} />
-                <input placeholder="Company name" onChange={() => { }} />
-                <div className="row"><button className="btn-primary" type="submit">Create HR Account</button><button type="button" className="btn-ghost" onClick={() => setShowRegister(false)}>Cancel</button></div>
-              </form>
+              {/* Password Input */}
+              <div>
+                <label style={{
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  color: '#374151',
+                  display: 'block',
+                  marginBottom: '8px',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px'
+                }}>
+                  Password
+                </label>
+                <div style={{
+                  position: 'relative',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}>
+                  <Lock size={18} style={{
+                    position: 'absolute',
+                    left: '12px',
+                    color: '#9ca3af',
+                    pointerEvents: 'none'
+                  }} />
+                  <input
+                    ref={passwordRef}
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    required
+                    style={{
+                      width: '100%',
+                      padding: '12px 44px 12px 44px',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '10px',
+                      fontSize: '14px',
+                      transition: 'all 0.3s',
+                      outline: 'none',
+                      boxSizing: 'border-box'
+                    }}
+                    onFocus={e => {
+                      e.currentTarget.style.borderColor = selectedRole === 'HR' ? '#6366f1' : '#3b82f6'
+                      e.currentTarget.style.boxShadow = `0 0 0 3px ${selectedRole === 'HR' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(59, 130, 246, 0.1)'}`
+                    }}
+                    onBlur={e => {
+                      e.currentTarget.style.borderColor = '#e5e7eb'
+                      e.currentTarget.style.boxShadow = 'none'
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={{
+                      position: 'absolute',
+                      right: '12px',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: '#6b7280',
+                      padding: '4px 8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'color 0.2s'
+                    }}
+                    onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.color = '#374151'}
+                    onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.color = '#6b7280'}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Remember & Forgot Password */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                fontSize: '13px'
+              }}>
+                <label style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  cursor: 'pointer',
+                  color: '#6b7280'
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={remember}
+                    onChange={e => setRemember(e.target.checked)}
+                    style={{
+                      width: '18px',
+                      height: '18px',
+                      cursor: 'pointer',
+                      accentColor: selectedRole === 'HR' ? '#6366f1' : '#3b82f6'
+                    }}
+                  />
+                  Remember me
+                </label>
+                <button
+                  type="button"
+                  onClick={() => alert('Password reset feature coming soon')}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: selectedRole === 'HR' ? '#6366f1' : '#3b82f6',
+                    cursor: 'pointer',
+                    fontWeight: '600',
+                    transition: 'opacity 0.2s'
+                  }}
+                  onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.opacity = '0.8'}
+                  onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.opacity = '1'}
+                >
+                  Forgot password?
+                </button>
+              </div>
+
+              {/* Error Message */}
+              {error && (
+                <div style={{
+                  backgroundColor: '#fee2e2',
+                  border: '1px solid #fecaca',
+                  color: '#991b1b',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: '500'
+                }}>
+                  {error}
+                </div>
+              )}
+
+              {/* Sign In Button */}
+              <button
+                type="submit"
+                disabled={loading}
+                style={{
+                  padding: '12px 16px',
+                  background: selectedRole === 'HR' 
+                    ? 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)'
+                    : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '10px',
+                  fontSize: '15px',
+                  fontWeight: '700',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.3s',
+                  opacity: loading ? 0.7 : 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  marginTop: '8px'
+                }}
+                onMouseEnter={e => {
+                  if (!loading) (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(-2px)'
+                }}
+                onMouseLeave={e => {
+                  (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(0)'
+                }}
+              >
+                {loading && (
+                  <div style={{
+                    display: 'inline-block',
+                    width: '16px',
+                    height: '16px',
+                    border: '2px solid rgba(255,255,255,0.3)',
+                    borderTop: '2px solid #fff',
+                    borderRadius: '50%',
+                    animation: 'spin 0.8s linear infinite'
+                  }} />
+                )}
+                <span>
+                  {loading ? 'Signing in...' : `Sign in as ${selectedRole === 'HR' ? 'HR' : 'Employee'}`}
+                </span>
+              </button>
+            </form>
+
+            {/* Support Link */}
+            <div style={{
+              textAlign: 'center',
+              marginTop: '16px',
+              fontSize: '13px',
+              color: '#6b7280'
+            }}>
+              Need help?{' '}
+              <button
+                onClick={() => alert('Contact support: support@prishaPolicy.com | Phone: 1-800-XXX-XXXX')}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: selectedRole === 'HR' ? '#6366f1' : '#3b82f6',
+                  cursor: 'pointer',
+                  fontWeight: '600',
+                  transition: 'opacity 0.2s'
+                }}
+                onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.opacity = '0.8'}
+                onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.opacity = '1'}
+              >
+                Contact Support
+              </button>
             </div>
-          )}
+          </div>
         </div>
 
-        <div className="app-login-right flex items-center justify-center">
-          <div className="app-illustration w-full h-full flex items-center justify-center bg-linear-to-br from-purple-600 to-sky-400 rounded-r-2xl">
-            <div className="illustration-inner text-center px-8 py-12">
-              <div className="illustration-title text-4xl md:text-5xl font-extrabold text-white tracking-wide drop-shadow-lg">Welcome</div>
-              <div className="illustration-sub mt-3 text-lg md:text-xl text-white/90">Digital Enrollment System</div>
+        {/* Right Column - Branding */}
+        <div style={{
+          background: 'linear-gradient(135deg, #9333ea 0%, #6366f1 50%, #3b82f6 100%)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '48px 40px',
+          color: '#fff',
+          position: 'relative',
+          overflow: 'hidden'
+        }}>
+          {/* Background Decoration */}
+          <div style={{
+            position: 'absolute',
+            width: '300px',
+            height: '300px',
+            background: 'rgba(255,255,255,0.1)',
+            borderRadius: '50%',
+            top: '-100px',
+            right: '-100px'
+          }} />
+          <div style={{
+            position: 'absolute',
+            width: '200px',
+            height: '200px',
+            background: 'rgba(255,255,255,0.05)',
+            borderRadius: '50%',
+            bottom: '-50px',
+            left: '-50px'
+          }} />
+
+          {/* Content */}
+          <div style={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
+            <h2 style={{
+              fontSize: '28px',
+              fontWeight: '700',
+              margin: '0 0 32px 0',
+              lineHeight: 1.3
+            }}>
+              Welcome to Digital Enrollment System
+            </h2>
+
+            {/* Features List */}
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '20px',
+              marginBottom: '40px',
+              textAlign: 'left'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                <div style={{
+                  width: '32px',
+                  height: '32px',
+                  backgroundColor: 'rgba(255,255,255,0.2)',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  <Lock size={18} />
+                </div>
+                <div>
+                  <div style={{ fontWeight: '600', marginBottom: '4px' }}>Secure Insurance Enrollment</div>
+                  <div style={{ fontSize: '13px', opacity: 0.9 }}>Fast, secure enrollment with end-to-end encryption</div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                <div style={{
+                  width: '32px',
+                  height: '32px',
+                  backgroundColor: 'rgba(255,255,255,0.2)',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  <Users size={18} />
+                </div>
+                <div>
+                  <div style={{ fontWeight: '600', marginBottom: '4px' }}>Manage Employees & Dependents</div>
+                  <div style={{ fontSize: '13px', opacity: 0.9 }}>Easy management of your entire family coverage</div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                <div style={{
+                  width: '32px',
+                  height: '32px',
+                  backgroundColor: 'rgba(255,255,255,0.2)',
+                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0
+                }}>
+                  <FileText size={18} />
+                </div>
+                <div>
+                  <div style={{ fontWeight: '600', marginBottom: '4px' }}>Download Policy Documents</div>
+                  <div style={{ fontSize: '13px', opacity: 0.9 }}>Access and download your policy documents anytime</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Security Note */}
+            <div style={{
+              backgroundColor: 'rgba(255,255,255,0.15)',
+              border: '1px solid rgba(255,255,255,0.3)',
+              borderRadius: '10px',
+              padding: '16px 12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              fontSize: '13px',
+              fontWeight: '500'
+            }}>
+              <CheckCircle size={18} />
+              <span>Your data is protected and encrypted</span>
             </div>
           </div>
+
+          {/* Style for spinning loader */}
+          <style>{`
+            @keyframes spin {
+              from { transform: rotate(0deg); }
+              to { transform: rotate(360deg); }
+            }
+          `}</style>
         </div>
       </div>
+
+      {/* Mobile Responsive */}
+      <style>{`
+        @media (max-width: 768px) {
+          div[style*="grid-template-columns: 1fr 1fr"] {
+            grid-template-columns: 1fr !important;
+          }
+          div[style*="max-width: 1000px"] {
+            min-height: auto !important;
+          }
+        }
+      `}</style>
     </div>
   )
 }

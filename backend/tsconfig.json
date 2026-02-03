@@ -9,5 +9,5 @@
     "skipLibCheck": true,
     "baseUrl": "./src"
   },
-  "exclude": ["node_modules", "dist", "prisma", "scripts", "fix_hr_role.ts", "test_employee_creation.ts"]
+  "exclude": ["node_modules", "dist", "prisma", "scripts"]
 }

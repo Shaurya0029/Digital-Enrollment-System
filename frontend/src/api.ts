@@ -150,4 +150,22 @@ export async function assignPolicy(dependentIdOrEmployeeId:number, policyIdOrPay
   }
 }
 
-export default { request, login, requestOtp, verifyOtp, getPolicies, getPolicy, createPolicy, updatePolicy, deletePolicy, getMe, updateProfile, changePassword, hrRegister, hrListEmployees, hrGetEmployee, getDependents, hrCreateEmployee, hrUpdateEmployee, hrDeleteEmployee, createDependent, updateDependent, deleteDependent, hrBulkCreate, updateEmployee, assignPolicy, getEmployees, getEmployeeById, deleteEmployee }
+export async function uploadDependentDocument(dependentId:number, file:File){
+  const formData = new FormData()
+  formData.append('file', file)
+  const headers = new Headers()
+  const token = localStorage.getItem('token')
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+  const res = await fetch(`${API_BASE}/dependents/${dependentId}/document`, { method: 'POST', headers, body: formData })
+  const text = await res.text()
+  if (res.status === 401 || res.status === 403) {
+    localStorage.removeItem('token')
+    localStorage.removeItem('role')
+    localStorage.removeItem('employeeId')
+    window.dispatchEvent(new Event('auth-change'))
+    throw new Error('Access denied')
+  }
+  try { return JSON.parse(text) } catch { return text }
+}
+
+export default { request, login, requestOtp, verifyOtp, getPolicies, getPolicy, createPolicy, updatePolicy, deletePolicy, getMe, updateProfile, changePassword, hrRegister, hrListEmployees, hrGetEmployee, getDependents, hrCreateEmployee, hrUpdateEmployee, hrDeleteEmployee, createDependent, updateDependent, deleteDependent, hrBulkCreate, updateEmployee, assignPolicy, getEmployees, getEmployeeById, deleteEmployee, uploadDependentDocument }
