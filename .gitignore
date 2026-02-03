@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Prisma
+.env.local
+prisma/.env
+
+# Temporary files
+temp/
+tmp/
+.tmp/
+
+# Coverage
+coverage/
+.nyc_output/
