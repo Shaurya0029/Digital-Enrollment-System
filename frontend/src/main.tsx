@@ -1,6 +1,6 @@
 import { createRoot } from 'react-dom/client'
 import { useEffect, useState } from 'react'
-import { BrowserRouter } from 'react-router-dom'
+import { HashRouter } from 'react-router-dom'
 import AppRoutes from './routes/AppRoutes'
 import './styles.css'
 
@@ -29,9 +29,9 @@ function App(){
   }, [token])
 
   return (
-    <BrowserRouter>
+    <HashRouter>
       <AppRoutes />
-    </BrowserRouter>
+    </HashRouter>
   )
 }
 
